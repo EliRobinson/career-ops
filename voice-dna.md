@@ -225,9 +225,9 @@ If it feels forced, pull back. Inhabit the voice.
 
 ## 6. PERSONAL VOICE REFERENCE (derived from Slack)
 
-Register calibration for Eli specifically, layered on top of sections 1-5 above. Sections 1-5 stay the hard/strong rules (no AI slop, ever); this section tunes tone and register by context. Applies to Tier 2 conversational surfaces only (cover letters, outreach, follow-ups) — never CV/ATS text.
+Register calibration for Eli specifically, layered on top of sections 1-5 above. Sections 1-5 stay the hard/strong rules (no AI slop, ever); this section tunes tone and register by context. Applies to Tier 2 conversational surfaces only (cover letters, outreach, follow-ups); never CV/ATS text.
 
-**Overall vibe:** warm, direct, unpretentious. Communicates like a senior engineer who has earned trust but doesn't wave it around. Thoughtful and deliberate in high-stakes messages, casual and efficient day-to-day. Honest about being human — mistakes, sick days, parenting — without being self-deprecating about it.
+**Overall vibe:** warm, direct, unpretentious. Communicates like a senior engineer who has earned trust but doesn't wave it around. Thoughtful and deliberate in high-stakes messages, casual and efficient day-to-day. Honest about being human (mistakes, sick days, parenting) without being self-deprecating about it.
 
 **Casual / quick messages:** short, punchy, no fluff. Often a single sentence, sometimes just a word or two. Doesn't over-explain.
 - "Ok, I'm working on it right now" / "Sure did" / "Go for it" / "Definitely not" / "Maybe too prescriptive?" / "I can just mute it 🙂"
