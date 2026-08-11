@@ -19,12 +19,14 @@
 // cv-sections-core.mjs for the failure modes exercised here.
 //
 // Skills carries one extra burden the other five do not. It is the LAST
-// section in every shipped template, so it has no following section marker to
-// stop at; with the shared `…|$` boundary, stripping it would run to
-// end-of-file and swallow the closing document skeleton. Its patterns
-// therefore match only up to an explicit `<!-- END -->` / `%%%% END %%%%`
-// sentinel, with NO end-of-input alternative, which produces two behaviours
-// this suite pins down:
+// section in most shipped templates (cv-template.html renders it above
+// Education to match cv.md's order), so it may have no following section
+// marker to stop at; with the shared `…|$` boundary, stripping a trailing
+// Skills would run to end-of-file and swallow the closing document skeleton.
+// Its patterns therefore match up to the next marker only — the explicit
+// `<!-- END -->` / `%%%% END %%%%` sentinel when Skills is last — with NO
+// end-of-input alternative, which produces two behaviours this suite pins
+// down (the second only where Skills is genuinely last):
 //
 //   - with the sentinel: the section is stripped and the closing skeleton
 //     survives ("keeps the closing document skeleton" checks);
@@ -178,11 +180,29 @@ for (const { file, format, after, hasCertifications, hasCompetencies } of TEMPLA
   // become a NO-OP — bare header, intact document — never a truncated tail.
   // `after` IS the sentinel literal — reuse it rather than restating it here,
   // so the two can never drift into a weaker substring of each other.
+  //
+  // The NO-OP half only applies when Skills is genuinely the last section, i.e.
+  // when the sentinel was its only following marker. cv-template.html renders
+  // Skills above Education, so there the next section's marker stops the strip
+  // and the section is removed cleanly with the sentinel gone — still no
+  // truncation, which is the invariant that actually matters. Derive that from
+  // the template rather than hardcoding a flag, so a future reorder is picked
+  // up here automatically.
   const noSentinel = template.replace(after, '');
   check(`${name}: fixture actually dropped the sentinel`, noSentinel.includes(after), false);
+  const skillsIsLast = noSentinel.indexOf(skillsMarker) ===
+    Math.max(...[projectsMarker, educationMarker, certificationsMarker, competenciesMarker, awardsMarker, skillsMarker]
+      .map((m) => noSentinel.indexOf(m)));
   const strippedNoSentinel = stripEmptySections(noSentinel, { ...FULL, skills: [] }, format);
-  check(`${name}: no sentinel + empty skills leaves the template untouched (fail-safe)`,
-    strippedNoSentinel === noSentinel, true);
+  if (skillsIsLast) {
+    check(`${name}: no sentinel + empty skills leaves the template untouched (fail-safe)`,
+      strippedNoSentinel === noSentinel, true);
+  } else {
+    check(`${name}: no sentinel + empty skills stops at the next marker, not EOF`,
+      strippedNoSentinel.includes(skillsMarker), false);
+    check(`${name}: no sentinel + empty skills keeps the section after skills`,
+      strippedNoSentinel.includes(educationMarker), true);
+  }
   check(`${name}: no sentinel + empty skills keeps the closing document skeleton`,
     strippedNoSentinel.trimEnd().endsWith(closingSkeleton), true);
   check(`${name}: no sentinel + empty skills keeps {{EXPERIENCE}}`,
