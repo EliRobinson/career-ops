@@ -144,6 +144,13 @@ plan/
 # Web — runtime cache/history the dashboard writes locally; nothing here is tracked.
 .career-ops-web/
 
+# career-ops-ui — the optional web dashboard (Fighter90/career-ops-ui). Its
+# documented layout is a *separate* clone nested at career-ops/web-ui/, so it
+# carries its own .git and must never be committed into this repo: staging it
+# would either vendor a whole second project or (with the nested .git present)
+# record a gitlink to a commit no one else can fetch.
+web-ui/
+
 # Upgrade-test fixtures are fictional system-layer data, never user data
 # (see DATA_CONTRACT.md). Re-include them past the unanchored user-layer
 # patterns above (cv.md, portals.yml).
