@@ -22,18 +22,20 @@
 //
 // ── The Skills sentinel: part of the template contract ───────────────────────
 //
-// Skills is the LAST section in every shipped template, which makes it the one
-// optional section with no following section marker to stop at. Given the
-// shared `…|$` boundary the others use, stripping an empty Skills section
-// falls through to true end-of-file and takes the closing
-// `</div></body></html>` (`\end{document}` in LaTeX) with it — a truncated,
-// unopenable document, which is far worse than the bare header this module
-// exists to remove.
+// Skills is the LAST section in most shipped templates (cv-template.html is the
+// exception — it renders Skills above Education to match cv.md's order), which
+// makes it the one optional section that may have no following section marker
+// to stop at. Given the shared `…|$` boundary the others use, stripping an
+// empty trailing Skills section falls through to true end-of-file and takes the
+// closing `</div></body></html>` (`\end{document}` in LaTeX) with it — a
+// truncated, unopenable document, which is far worse than the bare header this
+// module exists to remove.
 //
 // So the Skills patterns below deliberately do NOT use the shared boundary.
-// They match only up to an explicit `<!-- END -->` (`%%%% END %%%%` in LaTeX)
-// sentinel, with no end-of-input alternative. Two consequences, both
-// intentional:
+// They match up to the next marker only — which is the explicit `<!-- END -->`
+// (`%%%% END %%%%` in LaTeX) sentinel when Skills is last, and the following
+// section's marker when it is not — with no end-of-input alternative. Two
+// consequences, both intentional:
 //
 //   1. **The sentinel is part of the template contract.** A template that
 //      renders a Skills section must place `<!-- END -->` / `%%%% END %%%%`
@@ -74,10 +76,13 @@
 const HTML_BOUNDARY = String.raw`(?=<!--\s+[A-Z][A-Z ]*-->|$)`;
 const TEX_BOUNDARY = String.raw`(?=%{4,}\s|$)`;
 
-// Sentinel-only boundaries for Skills — no end-of-input alternative, so a
-// template lacking the sentinel is left untouched rather than truncated. See
-// "The Skills sentinel" above before changing these.
-const HTML_END_SENTINEL = String.raw`(?=<!--\s+END\s+-->)`;
+// Marker-only boundaries for Skills — same marker shapes as the shared
+// boundaries above, but with NO end-of-input alternative, so a template lacking
+// a following marker is left untouched rather than truncated. `END` is itself
+// an all-caps marker, so this stops at the `<!-- END -->` sentinel when Skills
+// is last and at the next section's marker when it is not. See "The Skills
+// sentinel" above before changing these.
+const HTML_END_SENTINEL = String.raw`(?=<!--\s+[A-Z][A-Z ]*-->)`;
 const TEX_END_SENTINEL = String.raw`(?=%{4,}\s+END\s+%{4,})`;
 
 const PATTERNS = {

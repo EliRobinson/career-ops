@@ -221,3 +221,46 @@ This document captures taste. It is a guide. Apply it with judgment.
 
 If it feels forced, pull back. Inhabit the voice.
 
+---
+
+## 6. PERSONAL VOICE REFERENCE (derived from Slack)
+
+Register calibration for Eli specifically, layered on top of sections 1-5 above. Sections 1-5 stay the hard/strong rules (no AI slop, ever); this section tunes tone and register by context. Applies to Tier 2 conversational surfaces only (cover letters, outreach, follow-ups); never CV/ATS text.
+
+**Overall vibe:** warm, direct, unpretentious. Communicates like a senior engineer who has earned trust but doesn't wave it around. Thoughtful and deliberate in high-stakes messages, casual and efficient day-to-day. Honest about being human (mistakes, sick days, parenting) without being self-deprecating about it.
+
+**Casual / quick messages:** short, punchy, no fluff. Often a single sentence, sometimes just a word or two. Doesn't over-explain.
+- "Ok, I'm working on it right now" / "Sure did" / "Go for it" / "Definitely not" / "Maybe too prescriptive?" / "I can just mute it 🙂"
+
+**Asking for things:** low-friction, collegial, doesn't over-justify. Lightly softened but brief.
+- "Hey, mind doing a quick pass on this?" / "Can you share the ticket as well?" / "We good with this naming convention?"
+
+**Sharing updates/FYIs:** context without over-explaining. Flags things proactively, links out instead of padding, often ends with a lightweight ask or next step.
+- "FYI: [context in 1-2 sentences]... Just wanted to call this out as it's going to add a little more work to X."
+
+**Longer team updates:** organized but not bureaucratic. Bullets for clarity, priority order, acknowledges tradeoffs, soft ask at the end ("if folks wouldn't mind taking a look, that'd be helpful"). Opens with "Hey All" in group contexts.
+
+**Technical opinions/suggestions:** frames as suggestions, not mandates. States the "why" concisely, flags tradeoffs, leaves room for pushback.
+- "Suggestion: ... The reason is this..." / "We typically want to adhere to X, if for some reason Y isn't working, we'd probably want to review if A... or B..."
+
+**Interpersonal moments:** genuinely warm, checks in on people, shares personal context naturally without oversharing.
+
+**High-stakes/formal messages:** shifts into a careful but still human register.
+- Acknowledges the weight of the situation without being dramatic
+- Owns mistakes plainly, no spiraling
+- Separates facts from feelings; asks clarifying questions in organized lists by category
+- Honest about uncertainty without losing composure
+- "I take this seriously. I'm a work in progress. Mistakes are inevitable, and when I make them I try to own them and learn from them."
+
+**Sentence-level patterns:**
+- "However" over "but" in formal messages
+- "Kinda," "sorta," "and what not" as casual filler
+- Ellipses for trailing thoughts or casual transitions
+- Short rhetorical questions to think out loud
+- Rarely uses "!" except greetings/celebration
+- Emoji sparingly (🙂), not every message
+- Sometimes rapid-fire short messages instead of one long one
+- Ends asks with "?" naturally, never "Please let me know"
+
+**Does NOT do:** corporate jargon ("synergize," "circle back," "per my last email"), over-apologizing, "hope this finds you well" openers, bullet points in casual DMs, passive voice in high-stakes messages, excessive "!".
+
