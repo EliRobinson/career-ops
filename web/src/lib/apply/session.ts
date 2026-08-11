@@ -138,7 +138,7 @@ async function headedBrowser(): Promise<Browser> {
     try {
       nb = await chromium.launch({ headless: false, args: ["--window-position=-3200,-3200", "--window-size=1280,940"] });
     } catch {
-      throw new Error("The apply feature needs Google Chrome. Install Chrome (or run: npx playwright install chromium) and try again.");
+      throw new Error("The apply feature needs Google Chrome. Install Chrome (or run: pnpm exec playwright install chromium) and try again.");
     }
   }
   globalThis.__coHeadedBrowser = nb;

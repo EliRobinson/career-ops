@@ -558,7 +558,7 @@ async function filterLive(offers) {
     ({ checkUrlLiveness, newLivenessPage } = await import('./liveness-browser.mjs'));
   } catch (err) {
     throw new Error(
-      `--liveness requires Playwright with Chromium (run "npx playwright install chromium"): ${err.message}`,
+      `--liveness requires Playwright with Chromium (run "pnpm exec playwright install chromium"): ${err.message}`,
       { cause: err },
     );
   }

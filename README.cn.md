@@ -40,7 +40,7 @@
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/加入社区-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
   &nbsp;
-  <a href="https://www.npmjs.com/package/@santifer/career-ops"><img src="https://img.shields.io/npm/dt/@santifer/career-ops?style=for-the-badge&logo=npm&color=CB3837&label=npx%20installs" alt="npm installs"></a></p>
+  <a href="https://www.npmjs.com/package/@santifer/career-ops"><img src="https://img.shields.io/npm/dt/@santifer/career-ops?style=for-the-badge&logo=npm&color=CB3837&label=npx%20installs" alt="pnpm installs"></a></p>
 
 <p align="center">
   <a href="https://claude.com/claude-code"><img src="https://img.shields.io/badge/Built_with-Claude_Code-000?style=for-the-badge&logo=anthropic&logoColor=white" alt="Built with Claude Code"></a>
@@ -122,8 +122,8 @@ claude   # 或 gemini / codex / qwen / opencode —— 在这里打开你的 AI 
 
 ```bash
 git clone https://github.com/santifer/career-ops.git
-cd career-ops && npm install
-npx playwright install chromium   # 仅生成 PDF 时需要
+cd career-ops && pnpm install
+pnpm exec playwright install chromium   # 仅生成 PDF 时需要
 claude   # 打开你的 AI CLI —— 它会在首次启动时引导你完成设置
 ```
 
@@ -141,7 +141,7 @@ career-ops 原生支持 [Gemini CLI](https://github.com/google-gemini/gemini-cli
 
 ```bash
 # 1. 安装 Gemini CLI（需要 Node.js 20+）
-npm install -g @google/gemini-cli
+pnpm add -g @google/gemini-cli
 # 或: npx @google/gemini-cli --version
 
 # 2. 在 career-ops 目录中运行 —— 首次启动时使用你的 Google 账号登录（免费）完成认证
@@ -166,12 +166,12 @@ cp .env.example .env
 # 编辑 .env → 设置 GEMINI_API_KEY=***
 
 # 2. 安装依赖
-npm install
+pnpm install
 
 # 3. 评估职位描述
 node gemini-eval.mjs "我们在招聘资深 AI 工程师..."
 node gemini-eval.mjs --file ./jds/my-job.txt
-npm run gemini:eval -- "职位描述文本"
+pnpm run gemini:eval -- "职位描述文本"
 ```
 
 > **免费层：** 两种选项都无需付费。原生 CLI 使用 Google OAuth；API 脚本使用 `gemini-3.6-flash`（速率限制取决于模型和层级；请参阅 Google AI 文档了解当前配额）。
@@ -239,8 +239,8 @@ career-ops 是一个单一斜杠命令，带有多种模式：
 内置终端仪表盘可以让你更直观地浏览整个求职管道：
 
 ```bash
-npm run serve:dashboard   # launch the TUI
-npm run build:dashboard   # optional: build the standalone binary
+pnpm run serve:dashboard   # launch the TUI
+pnpm run build:dashboard   # optional: build the standalone binary
 ```
 
 功能包括：6 个筛选标签、4 种排序模式、分组/平铺视图、懒加载预览、行内状态修改。

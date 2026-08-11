@@ -61,20 +61,20 @@ batch/
 
 ## Tracker Merge
 
-Workers write one TSV per offer to `batch/tracker-additions/`. The merge script (`npm run merge`) handles:
+Workers write one TSV per offer to `batch/tracker-additions/`. The merge script (`pnpm run merge`) handles:
 
 - Deduplication by company + role fuzzy match and report number
 - Column order conversion (TSV has status before score; applications.md has score before status)
 - In-place updates when a re-evaluation scores higher than the existing entry
 - Moving processed TSVs to `tracker-additions/merged/`
 
-Run `npm run merge` manually if you need to merge outside of a batch run.
+Run `pnpm run merge` manually if you need to merge outside of a batch run.
 
 ## Pipeline Reconcile
 
 Batch mode reads offers from `batch-input.tsv`, but the `data/pipeline.md` inbox is a separate list. Without reconciliation, an offer evaluated by a batch run stays in the pipeline "Pendientes" section and gets surfaced again on the next scan or `/career-ops pipeline` run -- producing duplicate reports.
 
-`reconcile-pipeline.mjs` (run as `npm run reconcile`) closes that gap: after the tracker merge, every `completed` or `skipped` offer in `batch-state.tsv` whose URL is still in pipeline "Pendientes" is moved to "Procesadas" with its report link and score (entries without a report file on disk are left in place). It is idempotent -- safe to run after every batch, or manually.
+`reconcile-pipeline.mjs` (run as `pnpm run reconcile`) closes that gap: after the tracker merge, every `completed` or `skipped` offer in `batch-state.tsv` whose URL is still in pipeline "Pendientes" is moved to "Procesadas" with its report link and score (entries without a report file on disk are left in place). It is idempotent -- safe to run after every batch, or manually.
 
 ## Resumability
 
@@ -91,5 +91,5 @@ A PID-based lock file (`batch-runner.pid`) prevents concurrent batch runs. If a 
 ## Prerequisites
 
 - Your CLI in PATH (see **Headless / Batch Mode** table in `AGENTS.md`)
-- Node.js >= 18, Playwright chromium installed (`npm run doctor` to verify)
+- Node.js >= 18, Playwright chromium installed (`pnpm run doctor` to verify)
 - `batch-input.tsv` with at least one offer

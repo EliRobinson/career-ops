@@ -32,7 +32,7 @@
 #   recheck_after_days: 30
 
 # -- Interamt.de searches (optional, German public sector) --
-# Read by scan-interamt.mjs (`npm run scan:interamt`), a separate Playwright
+# Read by scan-interamt.mjs (`pnpm run scan:interamt`), a separate Playwright
 # scanner for Interamt.de, a portal for German federal, state, and municipal
 # government job postings. Interamt has no REST API (Apache Wicket, stateful),
 # so it isn't reachable through the tracked_companies providers above;

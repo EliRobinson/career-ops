@@ -34,8 +34,8 @@ node scan-ats-full.mjs --seeds yc,a16z --dry-run
 node scan-ats-full.mjs --seeds yc --ats greenhouse,lever --since 5
 
 # npm shortcuts
-npm run scan:seeds   # yc + a16z
-npm run scan:yc      # YC only
+pnpm run scan:seeds   # yc + a16z
+pnpm run scan:yc      # YC only
 ```
 
 ### Programmatic

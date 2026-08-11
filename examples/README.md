@@ -17,7 +17,7 @@ Reference files that demonstrate career-ops data formats and conventions. None o
 
 These files are read-only references. To set up your own career-ops instance:
 
-1. Run `npm run doctor` to check prerequisites.
+1. Run `pnpm run doctor` to check prerequisites.
 2. Use `cv-example.md` (or `resume-example.md` for US/industry contexts) as a structural guide when writing your `cv.md`.
 3. Use `article-digest-example.md` as a template for your `article-digest.md` (optional but improves evaluation quality).
 4. See the `dual-track-engineer-instructor/` folder if your career spans two distinct archetypes.

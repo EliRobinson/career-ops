@@ -41,7 +41,7 @@
 <p align="center">
   <a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/Присоединиться_к_сообществу-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
   &nbsp;
-  <a href="https://www.npmjs.com/package/@santifer/career-ops"><img src="https://img.shields.io/npm/dt/@santifer/career-ops?style=for-the-badge&logo=npm&color=CB3837&label=npx%20installs" alt="npm installs"></a>
+  <a href="https://www.npmjs.com/package/@santifer/career-ops"><img src="https://img.shields.io/npm/dt/@santifer/career-ops?style=for-the-badge&logo=npm&color=CB3837&label=npx%20installs" alt="pnpm installs"></a>
 </p>
 
 <p align="center">
@@ -118,8 +118,8 @@ claude   # или gemini / codex / qwen / opencode — открой здесь �
 
 ```bash
 git clone https://github.com/santifer/career-ops.git
-cd career-ops && npm install
-npx playwright install chromium   # нужно только для генерации PDF
+cd career-ops && pnpm install
+pnpm exec playwright install chromium   # нужно только для генерации PDF
 claude   # открой свой AI-CLI — он проведёт онбординг при первом запуске
 ```
 
@@ -210,8 +210,8 @@ career-ops поддерживает ключевые российские джо
 Встроенный терминальный дашборд для визуального просмотра пайплайна:
 
 ```bash
-npm run serve:dashboard   # launch the TUI
-npm run build:dashboard   # optional: build the standalone binary
+pnpm run serve:dashboard   # launch the TUI
+pnpm run build:dashboard   # optional: build the standalone binary
 ```
 
 Возможности: 6 табов фильтрации, 4 режима сортировки, группированный/плоский вид, ленивая подгрузка превью, смена статусов inline.

@@ -27,6 +27,7 @@
         pkgs: with pkgs; [
 
           nodejs
+          pnpm
           bun
 
           coreutils
@@ -42,12 +43,12 @@
       };
 
       devShell.shellHook = pkgs: ''
-        # Pin npm playwright to match nixpkgs browser binaries
+        # Pin playwright to match nixpkgs browser binaries
         EXPECTED="${pkgs.playwright-driver.version}"
         CURRENT=$(node -e "try{console.log(require('playwright-core/package.json').version)}catch{}" 2>/dev/null)
         if [ "$CURRENT" != "$EXPECTED" ]; then
           echo "Pinning playwright to $EXPECTED to match Nix-provided browsers..."
-          npm install --no-save "playwright@$EXPECTED" >/dev/null 2>&1
+          pnpm add "playwright@$EXPECTED" >/dev/null 2>&1
         fi
       '';
 

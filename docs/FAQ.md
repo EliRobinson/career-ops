@@ -10,7 +10,7 @@ Windows does not create symlinks by default, so Git checks out the CLI skill ent
 
 ## 2. What is the difference between `scan` and `scan:full`?
 
-`npm run scan` is the standard portal scanner — it reads the companies you have configured in `portals.yml`, hits their ATS APIs (Greenhouse, Ashby, Lever) directly, and consumes zero LLM tokens. Use it for your regular daily or weekly discovery run. `npm run scan:full` inverts the direction: instead of scanning your curated list, it walks public ATS company directories and surfaces any fresh postings that match your `title_filter` / `location_filter`, so you catch roles from companies you haven't manually added to `portals.yml`. Run `scan:full` when you want broader discovery beyond your tracked list.
+`pnpm run scan` is the standard portal scanner — it reads the companies you have configured in `portals.yml`, hits their ATS APIs (Greenhouse, Ashby, Lever) directly, and consumes zero LLM tokens. Use it for your regular daily or weekly discovery run. `pnpm run scan:full` inverts the direction: instead of scanning your curated list, it walks public ATS company directories and surfaces any fresh postings that match your `title_filter` / `location_filter`, so you catch roles from companies you haven't manually added to `portals.yml`. Run `scan:full` when you want broader discovery beyond your tracked list.
 
 ## 3. How do I avoid hitting token or rate limits during a batch run?
 
@@ -66,7 +66,7 @@ No. `templates/` has `cv-template.html`, `cv-template.tex` (LaTeX/Overleaf), `cv
 
 ## Why does Chrome open during some scans but not others?
 
-Chromium only launches with `--verify`. A normal scan reads public ATS APIs and needs no browser; `--verify` checks a posting is genuinely still live, which needs a real page load. If it fails, the error asks you to run `npx playwright install chromium`.
+Chromium only launches with `--verify`. A normal scan reads public ATS APIs and needs no browser; `--verify` checks a posting is genuinely still live, which needs a real page load. If it fails, the error asks you to run `pnpm exec playwright install chromium`.
 
 ## Can I run career-ops in Docker / self-hosted?
 
@@ -82,4 +82,4 @@ Comment on it and we'll assign it (this is in CONTRIBUTING.md). A PR with no pri
 
 ## Can I use career-ops without a terminal?
 
-Yes: see [`docs/COWORK.md`](COWORK.md) which covers running it inside Claude Cowork, verified end to end. One step people trip on: Cowork's shell has no npm network access, so clone and `npm install` in a terminal *before* opening the folder.
+Yes: see [`docs/COWORK.md`](COWORK.md) which covers running it inside Claude Cowork, verified end to end. One step people trip on: Cowork's shell has no npm-registry network access, so clone and `pnpm install` in a terminal *before* opening the folder.

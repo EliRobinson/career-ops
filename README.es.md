@@ -50,7 +50,7 @@
 <p align="center">
   <a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/Unete_a_la_comunidad-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
   &nbsp;
-  <a href="https://www.npmjs.com/package/@santifer/career-ops"><img src="https://img.shields.io/npm/dt/@santifer/career-ops?style=for-the-badge&logo=npm&color=CB3837&label=npx%20installs" alt="npm installs"></a>
+  <a href="https://www.npmjs.com/package/@santifer/career-ops"><img src="https://img.shields.io/npm/dt/@santifer/career-ops?style=for-the-badge&logo=npm&color=CB3837&label=npx%20installs" alt="pnpm installs"></a>
 </p>
 
 <p align="center">
@@ -129,8 +129,8 @@ claude   # o gemini / codex / qwen / opencode — abre tu CLI de IA aquí
 
 ```bash
 git clone https://github.com/santifer/career-ops.git
-cd career-ops && npm install
-npx playwright install chromium   # solo para generar PDFs
+cd career-ops && pnpm install
+pnpm exec playwright install chromium   # solo para generar PDFs
 claude   # abre tu CLI de IA — te guiará en el primer arranque
 ```
 
@@ -213,8 +213,8 @@ El scanner viene con **45+ empresas** pre-configuradas y **19 queries** en los p
 El dashboard integrado en terminal te permite navegar tu pipeline visualmente:
 
 ```bash
-npm run serve:dashboard   # launch the TUI
-npm run build:dashboard   # optional: build the standalone binary
+pnpm run serve:dashboard   # launch the TUI
+pnpm run build:dashboard   # optional: build the standalone binary
 ```
 
 Features: 6 pestañas de filtro, 4 modos de ordenación, vista agrupada/plana, previews lazy-loaded, cambios de estado inline.

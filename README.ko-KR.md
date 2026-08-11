@@ -40,7 +40,7 @@
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/커뮤니티_참여하기-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
   &nbsp;
-  <a href="https://www.npmjs.com/package/@santifer/career-ops"><img src="https://img.shields.io/npm/dt/@santifer/career-ops?style=for-the-badge&logo=npm&color=CB3837&label=npx%20installs" alt="npm installs"></a></p>
+  <a href="https://www.npmjs.com/package/@santifer/career-ops"><img src="https://img.shields.io/npm/dt/@santifer/career-ops?style=for-the-badge&logo=npm&color=CB3837&label=npx%20installs" alt="pnpm installs"></a></p>
 
 <p align="center">
   <a href="https://claude.com/claude-code"><img src="https://img.shields.io/badge/Built_with-Claude_Code-000?style=for-the-badge&logo=anthropic&logoColor=white" alt="Built with Claude Code"></a>
@@ -122,8 +122,8 @@ claude   # or gemini / codex / qwen / opencode — open your AI CLI here
 
 ```bash
 git clone https://github.com/santifer/career-ops.git
-cd career-ops && npm install
-npx playwright install chromium   # only needed for PDF generation
+cd career-ops && pnpm install
+pnpm exec playwright install chromium   # only needed for PDF generation
 claude   # open your AI CLI — it onboards you on first launch
 ```
 
@@ -195,8 +195,8 @@ career-ops는 다양한 모드를 가진 하나의 슬래시 커맨드입니다:
 내장 터미널 대시보드로 파이프라인을 시각적으로 탐색할 수 있습니다:
 
 ```bash
-npm run serve:dashboard   # launch the TUI
-npm run build:dashboard   # optional: build the standalone binary
+pnpm run serve:dashboard   # launch the TUI
+pnpm run build:dashboard   # optional: build the standalone binary
 ```
 
 기능: 6개의 필터 탭, 4가지 정렬 모드, 그룹/플랫 뷰, 지연 로딩 미리보기, 인라인 상태 변경.

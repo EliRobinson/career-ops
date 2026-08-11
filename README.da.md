@@ -117,8 +117,8 @@ claude   # eller gemini / codex / qwen / opencode — åbn dit AI-CLI her
 
 ```bash
 git clone https://github.com/santifer/career-ops.git
-cd career-ops && npm install
-npx playwright install chromium   # kun nødvendigt til PDF-generering
+cd career-ops && pnpm install
+pnpm exec playwright install chromium   # kun nødvendigt til PDF-generering
 claude   # åbn dit AI-CLI — første kørsel guider dig gennem onboarding
 ```
 
@@ -186,7 +186,7 @@ Skanneren leveres med **45+ virksomheder** klar til skanning og **19 forespørgs
 
 **Gennemsøgte portaler:** Ashby, Greenhouse, Lever, Wellfound, Workable, RemoteFront
 
-Som standard stoler `node scan.mjs` (`npm run scan`) på det, hvert ATS-feed returnerer. Nogle virksomheder lader forældede opslag blive stående, selv efter rekrutteringen er lukket. Brug `--verify` for at køre Playwright efter API-fasen og frasortere udløbne stillinger, før de tilføjes pipelinen:
+Som standard stoler `node scan.mjs` (`pnpm run scan`) på det, hvert ATS-feed returnerer. Nogle virksomheder lader forældede opslag blive stående, selv efter rekrutteringen er lukket. Brug `--verify` for at køre Playwright efter API-fasen og frasortere udløbne stillinger, før de tilføjes pipelinen:
 
 ```bash
 node scan.mjs --verify          # token-fri søgning + liveness-verifikation via Playwright

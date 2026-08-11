@@ -10,7 +10,7 @@
 #   ./cops shell                     # interactive bash
 #   ./cops up | down | rebuild | logs
 #
-# Anything not matching a known subcommand is forwarded to npm run <subcommand>
+# Anything not matching a known subcommand is forwarded to pnpm run <subcommand>
 # when package.json defines it, otherwise executed verbatim inside the container.
 
 set -euo pipefail
@@ -52,19 +52,19 @@ case "${1:-}" in
     ensure_up
     exec docker compose exec -it "$SERVICE" bash
     ;;
-  node|npm|npx|go|bash|sh)
+  node|pnpm|npm|npx|go|bash|sh)
     ensure_up
     exec docker compose exec -it "$SERVICE" "$@"
     ;;
 esac
 
-# Map known npm scripts → `npm run <name>`. Anything else is forwarded raw.
+# Map known package scripts → `pnpm run <name>`. Anything else is forwarded raw.
 cmd="$1"; shift || true
 
 case "$cmd" in
   doctor|verify|normalize|dedup|merge|pdf|sync-check|liveness|scan|gemini:eval|update|update:check|rollback)
     ensure_up
-    exec docker compose exec -it "$SERVICE" npm run --silent "$cmd" -- "$@"
+    exec docker compose exec -it "$SERVICE" pnpm run --silent "$cmd" -- "$@"
     ;;
   *)
     ensure_up

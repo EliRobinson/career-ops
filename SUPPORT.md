@@ -15,7 +15,7 @@ career-ops is an open source project maintained in limited time. Here's how to g
 ## Before opening an issue
 
 1. Search existing issues — someone may have reported it already
-2. Run `npm run doctor` — it catches most setup problems
+2. Run `pnpm run doctor` — it catches most setup problems
 3. Include your OS, Node.js version, and the CLI you're using (Claude Code, OpenCode, etc.)
 
 ## What NOT to use GitHub Issues for

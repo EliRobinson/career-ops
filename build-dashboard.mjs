@@ -31,4 +31,4 @@ if (result.status !== 0) {
   process.exit(result.status ?? 1);
 }
 
-console.log(`Built dashboard/${out} — run it with: npm run serve:dashboard (or dashboard/${out} --path .)`);
+console.log(`Built dashboard/${out} — run it with: pnpm run serve:dashboard (or dashboard/${out} --path .)`);
