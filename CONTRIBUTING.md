@@ -106,7 +106,7 @@ To propose a source (yours or anyone's): [open a source proposal](https://github
 
 - Keep modes language-agnostic when possible (Claude handles both EN and ES)
 - Scripts should handle missing files gracefully (check `existsSync` before `readFileSync`)
-- Dashboard changes require a build (`npm run build:dashboard`) — test with real data before submitting
+- Dashboard changes require a build (`pnpm run build:dashboard`) — test with real data before submitting
 - Don't commit personal data (cv.md, profile.yml, applications.md, reports/)
 
 ## What we do NOT accept
@@ -125,13 +125,13 @@ To propose a source (yours or anyone's): [open a source proposal](https://github
 
 ```bash
 # Scripts
-npm run doctor                # Setup validation
+pnpm run doctor                # Setup validation
 node verify-pipeline.mjs     # Health check
 node cv-sync-check.mjs        # Config check
 
 # Dashboard
-npm run build:dashboard       # go build with platform-correct binary name
-npm run serve:dashboard       # launch the TUI against the repo root
+pnpm run build:dashboard       # go build with platform-correct binary name
+pnpm run serve:dashboard       # launch the TUI against the repo root
 
 # Tests
 node test-all.mjs             # Full suite — run before pushing/opening a PR
@@ -146,7 +146,7 @@ no registration needed. Do not add a section to `test-all.mjs` for this.
 **Adding a test for the web app:** web suites live under `web/tests/`, mirroring
 the tested module's path below `web/src/` (`src/lib/clean-chips.mjs` →
 `tests/lib/clean-chips.test.mjs`), named `{module}.test.mjs`. `web/`'s own
-`npm test` glob-discovers them, so no registration is needed there either — but
+`pnpm test` glob-discovers them, so no registration is needed there either — but
 keep them out of `web/src/` (Next.js scans that tree) and write them as `.mjs`,
 since there is no TypeScript loader for `node --test`. `web/README.md` has the
 detail; `tests/web-test-layout.test.mjs` enforces it on every PR.

@@ -14,8 +14,8 @@ component.
 Requires Go 1.24+ (`go.mod`). From the repo root:
 
 ```bash
-npm run serve:dashboard    # go run . --path .. (launch against the repo root)
-npm run build:dashboard    # build the standalone binary
+pnpm run serve:dashboard    # go run . --path .. (launch against the repo root)
+pnpm run build:dashboard    # build the standalone binary
 ```
 
 `build-dashboard.mjs` exists because `go build -o career-dashboard .` writes

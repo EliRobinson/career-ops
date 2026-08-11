@@ -124,8 +124,14 @@ opencode.json
 .mcp.json
 career-dashboard
 career-dashboard.exe
+# pnpm is this project's package manager (see "packageManager" in
+# package.json). Mirrors the pre-existing npm policy: the root lockfile is
+# an install artifact of a private, unpublished package and stays
+# untracked; web/ is a real app and keeps its lockfile committed.
 package-lock.json
 !web/package-lock.json
+pnpm-lock.yaml
+!web/pnpm-lock.yaml
 
 # Playwright MCP server run artifacts (ephemeral, machine-local)
 .playwright-mcp/

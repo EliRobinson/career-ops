@@ -49,7 +49,7 @@ The `./cops` wrapper forwards any command into the container.
 Unknown subcommands fall through to `docker compose exec` so anything works:
 
 ```bash
-./cops npm test
+./cops pnpm test
 ./cops bash -c 'find reports -name "*.md" | wc -l'
 ```
 

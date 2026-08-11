@@ -21,7 +21,7 @@ const projectRoot =
   targetIdx !== -1 && argv[targetIdx + 1] ? argv[targetIdx + 1] : __dirname;
 const JSON_OUT = argv.includes('--json');
 // --strict adds a live ATS-slug probe of portals.yml (network). Opt-in so the
-// default `npm run doctor` stays fast and fully offline.
+// default `pnpm run doctor` stays fast and fully offline.
 const STRICT = argv.includes('--strict');
 
 // CLIs the doctor recognises.
@@ -117,7 +117,7 @@ function checkDependencies() {
   return {
     pass: false,
     label: 'Dependencies not installed',
-    fix: 'Run: npm install',
+    fix: 'Run: pnpm install',
   };
 }
 
@@ -129,7 +129,7 @@ async function checkPlaywright() {
     return {
       pass: false,
       label: 'Playwright chromium not installed',
-      fix: 'Run: npx playwright install chromium',
+      fix: 'Run: pnpm exec playwright install chromium',
     };
   }
   // Validate by launching — chromium.executablePath() points at Chrome for Testing
@@ -145,7 +145,7 @@ async function checkPlaywright() {
     return {
       pass: false,
       label: 'Playwright chromium not installed',
-      fix: 'Run: npx playwright install chromium',
+      fix: 'Run: pnpm exec playwright install chromium',
     };
   } finally {
     try { await browser?.close(); } catch { /* ignore */ }
@@ -498,14 +498,14 @@ async function main() {
 
   console.log('');
   if (failures > 0) {
-    console.log(`Result: ${failures} issue${failures === 1 ? '' : 's'} found. Fix them and run \`npm run doctor\` again.`);
+    console.log(`Result: ${failures} issue${failures === 1 ? '' : 's'} found. Fix them and run \`pnpm run doctor\` again.`);
     process.exit(1);
   } else {
     const warnNote = warnings > 0 ? ` (${warnings} warning${warnings === 1 ? '' : 's'} — see above)` : '';
     console.log(`Result: All checks passed${warnNote}. You're ready to go! Run \`claude\` (or \`opencode\`) to start.`);
     console.log('');
     console.log('Join the community: https://discord.gg/8pRpHETxa4');
-    console.log('Read the manifesto: `npm run manifesto` — a new way of job searching is taking shape, and you are now part of it.');
+    console.log('Read the manifesto: `pnpm run manifesto` — a new way of job searching is taking shape, and you are now part of it.');
     process.exit(0);
   }
 }

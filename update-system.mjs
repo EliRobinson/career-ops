@@ -1163,18 +1163,21 @@ async function apply() {
       throw violation;
     }
 
-    // 5. Install any new dependencies
+    // 5. Install any new dependencies.
+    //    NOTE: NPM_INSTALL_TIMEOUT_MS (and its CAREER_OPS_NPM_INSTALL_TIMEOUT_MS
+    //    env knob) keep their names on purpose — they are a documented public
+    //    knob, and renaming them would silently ignore existing overrides.
     try {
-      execSync('npm install --silent', { cwd: ROOT, timeout: NPM_INSTALL_TIMEOUT_MS });
+      execSync('pnpm install --silent', { cwd: ROOT, timeout: NPM_INSTALL_TIMEOUT_MS });
     } catch {
-      console.log('npm install skipped (may need manual run)');
+      console.log('pnpm install skipped (may need manual run)');
     }
 
-    // 5b. Ensure Playwright browser binary is up to date after npm install
+    // 5b. Ensure Playwright browser binary is up to date after the install
     try {
-      execSync('npx playwright install chromium', { cwd: ROOT, timeout: PLAYWRIGHT_INSTALL_TIMEOUT_MS, stdio: 'ignore' });
+      execSync('pnpm exec playwright install chromium', { cwd: ROOT, timeout: PLAYWRIGHT_INSTALL_TIMEOUT_MS, stdio: 'ignore' });
     } catch {
-      console.log('playwright install skipped (run manually: npx playwright install chromium)');
+      console.log('playwright install skipped (run manually: pnpm exec playwright install chromium)');
     }
 
     // 6. Rebuild compiled dashboard if Go sources changed
@@ -1246,7 +1249,7 @@ async function apply() {
     console.log('\n-- The CareerOps Manifesto ------------------------------');
     console.log('A new way of job searching is taking shape. You are');
     console.log('already practicing it. Read it, sign it if you want to help:');
-    console.log('    npm run manifesto  ·  https://career-ops.org/manifesto?utm_source=updater');
+    console.log('    pnpm run manifesto  ·  https://career-ops.org/manifesto?utm_source=updater');
 
   } finally {
     // Remove lock

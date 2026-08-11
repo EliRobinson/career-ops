@@ -145,11 +145,11 @@ claude   # அல்லது codex / qwen / opencode / agy / grok — உங்
 
 ```bash
 git clone https://github.com/santifer/career-ops.git
-cd career-ops && npm install
-npx playwright install chromium   # PDF உருவாக்குவதற்கு மட்டும் தேவை
+cd career-ops && pnpm install
+pnpm exec playwright install chromium   # PDF உருவாக்குவதற்கு மட்டும் தேவை
 
 # 2. அமைப்பை சரிபார்க்கவும்
-npm run doctor                     # தேவையான அனைத்தும் சரியாக உள்ளதா என்பதைச் சரிபார்க்கும்
+pnpm run doctor                     # தேவையான அனைத்தும் சரியாக உள்ளதா என்பதைச் சரிபார்க்கும்
 
 # 3. அமைப்புகளை உள்ளமைக்கவும்
 cp config/profile.example.yml config/profile.yml  # உங்கள் விவரங்களைப் புதுப்பிக்கவும்
@@ -266,13 +266,13 @@ cp .env.example .env
 # Edit .env, set GEMINI_API_KEY=your_key_here
 
 # 2. Install dependencies
-npm install
+pnpm install
 
 # 3. Evaluate a job description
 node gemini-eval.mjs "We are looking for a Senior AI Engineer..."
 node gemini-eval.mjs --file ./jds/my-job.txt
 node agent-inbox.mjs add "..."   # queue a request for the next session
-npm run gemini:eval -- "JD text here"
+pnpm run gemini:eval -- "JD text here"
 ```
 
 > **இலவச திட்டம் (Free Tier):** இரண்டு முறைகளும் கட்டணமின்றி பயன்படுத்தலாம். Native CLI, Google OAuth-ஐ பயன்படுத்துகிறது. API Script, `gemini-2.5-flash` மாதிரியைப் பயன்படுத்துகிறது (15 RPM, நாளொன்றுக்கு 1M Tokens இலவசம்).
@@ -347,7 +347,7 @@ Scanner-ல் **45-க்கும் மேற்பட்ட நிறுவ�
 
 **தேடப்படும் வேலைவாய்ப்பு தளங்கள்:** 21 Provider Modules மூலம் ATS API-கள், Job Board Feeds, XML/RSS Feeds, Markdown Feeds மற்றும் Local Parsers ஆகியவை ஆதரிக்கப்படுகின்றன. முழுப் பட்டியலுக்கு **Supported Job Boards** ஆவணத்தைப் பார்க்கவும்.
 
-இயல்பாக `node scan.mjs` (`npm run scan`) ஒவ்வொரு ATS Feed வழங்கும் தகவலையும் நம்புகிறது. சில நிறுவனங்கள் வேலை முடிந்த பிறகும் பழைய Job Postings-ஐ API-யில் வைத்திருப்பதால், அவை `pipeline.md`-இல் தோன்றக்கூடும்.
+இயல்பாக `node scan.mjs` (`pnpm run scan`) ஒவ்வொரு ATS Feed வழங்கும் தகவலையும் நம்புகிறது. சில நிறுவனங்கள் வேலை முடிந்த பிறகும் பழைய Job Postings-ஐ API-யில் வைத்திருப்பதால், அவை `pipeline.md`-இல் தோன்றக்கூடும்.
 
 அவற்றைத் தவிர்க்க `--verify` விருப்பத்துடன் இயக்கலாம்:
 
@@ -363,8 +363,8 @@ API Scan முடிந்த பிறகு Playwright மூலம் வே
 உள்ளமைக்கப்பட்ட Terminal Dashboard மூலம் உங்கள் Pipeline-ஐ பார்வையிடவும், வடிகட்டவும், வரிசைப்படுத்தவும் முடியும்.
 
 ```bash
-npm run serve:dashboard   # TUI-ஐ தொடங்கும்
-npm run build:dashboard   # விருப்பமானது: Standalone Binary-ஐ உருவாக்கும்
+pnpm run serve:dashboard   # TUI-ஐ தொடங்கும்
+pnpm run build:dashboard   # விருப்பமானது: Standalone Binary-ஐ உருவாக்கும்
 ```
 
 **அம்சங்கள்:**

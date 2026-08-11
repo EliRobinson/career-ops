@@ -1987,7 +1987,7 @@ async function verifyOffers(offers, { headedFallback = false, throttleBaseMs = 0
     ({ checkUrlLiveness, checkUrlLivenessWithFallback, createHeadedPageProvider, newLivenessPage, jitteredDelayMs, sleep } = await import('./liveness-browser.mjs'));
   } catch (err) {
     throw new Error(
-      `--verify requires Playwright with Chromium (run "npx playwright install chromium"): ${err.message}`,
+      `--verify requires Playwright with Chromium (run "pnpm exec playwright install chromium"): ${err.message}`,
       { cause: err },
     );
   }
@@ -1997,7 +1997,7 @@ async function verifyOffers(offers, { headedFallback = false, throttleBaseMs = 0
     browser = await chromium.launch({ headless: true });
   } catch (err) {
     throw new Error(
-      `--verify could not launch Chromium (run "npx playwright install chromium" or re-run without --verify): ${err.message}`,
+      `--verify could not launch Chromium (run "pnpm exec playwright install chromium" or re-run without --verify): ${err.message}`,
       { cause: err },
     );
   }

@@ -140,11 +140,11 @@ claude   # या gemini / codex / qwen / opencode / agy / grok — यहाँ
 
 ```bash
 git clone https://github.com/santifer/career-ops.git
-cd career-ops && npm install
-npx playwright install chromium   # केवल PDF generation के लिए ज़रूरी
+cd career-ops && pnpm install
+pnpm exec playwright install chromium   # केवल PDF generation के लिए ज़रूरी
 
 # 2. Setup check करें
-npm run doctor                     # सभी prerequisites validate करता है
+pnpm run doctor                     # सभी prerequisites validate करता है
 
 # 3. Configure करें
 cp config/profile.example.yml config/profile.yml  # अपनी details से edit करें
@@ -261,12 +261,12 @@ cp .env.example .env
 # .env edit करें, GEMINI_API_KEY=your_key_here set करें
 
 # 2. Dependencies install करें
-npm install
+pnpm install
 
 # 3. Job description evaluate करें
 node gemini-eval.mjs "We are looking for a Senior AI Engineer..."
 node gemini-eval.mjs --file ./jds/my-job.txt
-npm run gemini:eval -- "JD text here"
+pnpm run gemini:eval -- "JD text here"
 ```
 
 > **Free tier:** दोनों options billing के बिना काम करते हैं। Native CLI Google OAuth use करता है; API script `gemini-2.5-flash` use करता है (15 RPM, 1M tokens/day free)।
@@ -332,7 +332,7 @@ Scanner **45+ companies** के साथ scan करने और major job bo
 
 **Job boards searched:** 21 provider modules ATS APIs, board-wide feeds, XML/RSS feeds, markdown feeds, और local parsers cover करते हैं। Full table के लिए [Supported job boards](docs/SUPPORTED_JOB_BOARDS.md) देखें।
 
-Default `node scan.mjs` (a.k.a. `npm run scan`) प्रत्येक ATS feed जो return करता है उसे trust करता है। कुछ companies role close होने के बाद भी अपने public API में stale postings छोड़ देती हैं, इसलिए वे expired entries `pipeline.md` में leak हो सकती हैं। Expired postings को pipeline में hit होने से पहले drop करने के लिए API pass के बाद Playwright launch करने के लिए `--verify` pass करें:
+Default `node scan.mjs` (a.k.a. `pnpm run scan`) प्रत्येक ATS feed जो return करता है उसे trust करता है। कुछ companies role close होने के बाद भी अपने public API में stale postings छोड़ देती हैं, इसलिए वे expired entries `pipeline.md` में leak हो सकती हैं। Expired postings को pipeline में hit होने से पहले drop करने के लिए API pass के बाद Playwright launch करने के लिए `--verify` pass करें:
 
 ```bash
 node scan.mjs --verify          # zero-token discovery + Playwright liveness check
@@ -345,8 +345,8 @@ Verification sequential है और केवल new offers (dedup के ब�
 Built-in terminal dashboard से आप अपनी pipeline visually browse कर सकते हैं:
 
 ```bash
-npm run serve:dashboard   # TUI launch करें
-npm run build:dashboard   # optional: standalone binary build करें
+pnpm run serve:dashboard   # TUI launch करें
+pnpm run build:dashboard   # optional: standalone binary build करें
 ```
 
 Features: 6 filter tabs, 4 sort modes, grouped/flat view, lazy-loaded previews, inline status changes।

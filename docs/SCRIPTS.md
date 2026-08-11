@@ -1,55 +1,55 @@
 # Scripts Reference
 
 All scripts live in the project root as `.mjs` modules. Most are exposed via
-`npm run <name>`; agent-invoked utilities (bottom section) run via
+`pnpm run <name>`; agent-invoked utilities (bottom section) run via
 `node <script>` directly.
 
 ## Quick Reference
 
 | Command | Script | Purpose |
 |---------|--------|---------|
-| `npm run doctor` | `doctor.mjs` | Validate setup prerequisites |
-| `npm run verify` | `verify-pipeline.mjs` | Check pipeline data integrity |
-| `npm run normalize` | `normalize-statuses.mjs` | Fix non-canonical statuses |
-| `npm run dedup` | `dedup-tracker.mjs` | Remove duplicate tracker entries |
-| `npm run merge` | `merge-tracker.mjs` | Merge batch TSVs into applications.md |
-| `npm run pdf` | `generate-pdf.mjs` | Convert HTML to ATS-optimized PDF |
-| `npm run jd:similarity` | `jd-similarity.mjs` | Compare a new JD with a previous JD/CV and recommend reuse, edits, or regeneration |
-| `npm run img-to-pdf` | `img-to-pdf.mjs` | Convert a single screenshot/image into a single-page PDF |
+| `pnpm run doctor` | `doctor.mjs` | Validate setup prerequisites |
+| `pnpm run verify` | `verify-pipeline.mjs` | Check pipeline data integrity |
+| `pnpm run normalize` | `normalize-statuses.mjs` | Fix non-canonical statuses |
+| `pnpm run dedup` | `dedup-tracker.mjs` | Remove duplicate tracker entries |
+| `pnpm run merge` | `merge-tracker.mjs` | Merge batch TSVs into applications.md |
+| `pnpm run pdf` | `generate-pdf.mjs` | Convert HTML to ATS-optimized PDF |
+| `pnpm run jd:similarity` | `jd-similarity.mjs` | Compare a new JD with a previous JD/CV and recommend reuse, edits, or regeneration |
+| `pnpm run img-to-pdf` | `img-to-pdf.mjs` | Convert a single screenshot/image into a single-page PDF |
 | `node build-cv-latex.mjs` | `build-cv-latex.mjs` | Build .tex from structured JSON payload |
-| `npm run sync-check` | `cv-sync-check.mjs` | Validate CV/profile consistency |
-| `npm run patterns` | `analyze-patterns.mjs` | Analyze tracker outcomes and report patterns |
-| `npm run upskill` | `upskill.mjs` | Aggregate skill-gap map from tracked reports (or `--url-text <url\|file>` for a single-JD targeted gap analysis) |
-| `npm run add` | `add-entry.mjs` | Dedup + insert a `/career-ops add` entry into cv.md / article-digest.md |
-| `npm run update:check` | `update-system.mjs check` | Check for upstream updates |
-| `npm run update` | `update-system.mjs apply` | Apply upstream update |
-| `npm run rollback` | `update-system.mjs rollback` | Rollback last update |
-| `npm run liveness` | `check-liveness.mjs` | Test if job URLs are still active |
-| `npm run extract` | `browser-extract.mjs` | Headless read-only page extractor (opt-in `scan.extractor: cli`) — compact JSON for scan/JD |
-| `npm run scan` | `scan.mjs` | Zero-token portal scanner |
-| `npm run scan:full` | `scan-ats-full.mjs` | Reverse ATS discovery scanner |
-| `npm run company:funded` | `company-funded.mjs` | Review-first discovery of recently funded companies |
-| `npm run validate:portals` | `validate-portals.mjs` | Validate portals.yml shape before scanning |
-| `npm run tracker` | `tracker.mjs` | SQLite derived index over applications.md — sync/query/history/export |
-| `npm run find` | `find.mjs` | Resolve a report#/tracker#/company query to its full pipeline identity |
-| `npm run invite-match` | `invite-match.mjs` | Fuzzy-match a pasted interview-invite email against `data/applications.md` |
-| `npm run application:init` | `application-artifacts.mjs` | Initialize one versioned application-scoped JD/CV/PDF artifact bundle |
-| `npm run paste-reply` | `paste-reply.mjs` | Manual/no-Gmail input into the `reply-watch.mjs` classification pipeline |
-| `npm run freshness` | `check-table-freshness.mjs` | Staleness validator for jurisdiction data tables (`as_of` / `next_effective` watchdog) |
-| `npm run openai:tailor` | `openai-tailor.mjs` | Tailor a CV via any OpenAI-compatible endpoint (headless companion to `openai-eval.mjs`) |
-| `npm run or` | `openrouter-runner.mjs` | Run scan/evaluate/pipeline/apply on OpenRouter free models — no Claude CLI required |
-| `npm run reconcile` | `reconcile-pipeline.mjs` | Remove batch-evaluated offers from pipeline.md "Pendientes" |
-| `npm run cover-letter` | `generate-cover-letter.mjs` | Render a cover-letter JSON payload to PDF |
-| `npm run verify:portals` | `verify-portals.mjs` | Probe ATS endpoints to confirm portals.yml slugs resolve (network) |
+| `pnpm run sync-check` | `cv-sync-check.mjs` | Validate CV/profile consistency |
+| `pnpm run patterns` | `analyze-patterns.mjs` | Analyze tracker outcomes and report patterns |
+| `pnpm run upskill` | `upskill.mjs` | Aggregate skill-gap map from tracked reports (or `--url-text <url\|file>` for a single-JD targeted gap analysis) |
+| `pnpm run add` | `add-entry.mjs` | Dedup + insert a `/career-ops add` entry into cv.md / article-digest.md |
+| `pnpm run update:check` | `update-system.mjs check` | Check for upstream updates |
+| `pnpm run update` | `update-system.mjs apply` | Apply upstream update |
+| `pnpm run rollback` | `update-system.mjs rollback` | Rollback last update |
+| `pnpm run liveness` | `check-liveness.mjs` | Test if job URLs are still active |
+| `pnpm run extract` | `browser-extract.mjs` | Headless read-only page extractor (opt-in `scan.extractor: cli`) — compact JSON for scan/JD |
+| `pnpm run scan` | `scan.mjs` | Zero-token portal scanner |
+| `pnpm run scan:full` | `scan-ats-full.mjs` | Reverse ATS discovery scanner |
+| `pnpm run company:funded` | `company-funded.mjs` | Review-first discovery of recently funded companies |
+| `pnpm run validate:portals` | `validate-portals.mjs` | Validate portals.yml shape before scanning |
+| `pnpm run tracker` | `tracker.mjs` | SQLite derived index over applications.md — sync/query/history/export |
+| `pnpm run find` | `find.mjs` | Resolve a report#/tracker#/company query to its full pipeline identity |
+| `pnpm run invite-match` | `invite-match.mjs` | Fuzzy-match a pasted interview-invite email against `data/applications.md` |
+| `pnpm run application:init` | `application-artifacts.mjs` | Initialize one versioned application-scoped JD/CV/PDF artifact bundle |
+| `pnpm run paste-reply` | `paste-reply.mjs` | Manual/no-Gmail input into the `reply-watch.mjs` classification pipeline |
+| `pnpm run freshness` | `check-table-freshness.mjs` | Staleness validator for jurisdiction data tables (`as_of` / `next_effective` watchdog) |
+| `pnpm run openai:tailor` | `openai-tailor.mjs` | Tailor a CV via any OpenAI-compatible endpoint (headless companion to `openai-eval.mjs`) |
+| `pnpm run or` | `openrouter-runner.mjs` | Run scan/evaluate/pipeline/apply on OpenRouter free models — no Claude CLI required |
+| `pnpm run reconcile` | `reconcile-pipeline.mjs` | Remove batch-evaluated offers from pipeline.md "Pendientes" |
+| `pnpm run cover-letter` | `generate-cover-letter.mjs` | Render a cover-letter JSON payload to PDF |
+| `pnpm run verify:portals` | `verify-portals.mjs` | Probe ATS endpoints to confirm portals.yml slugs resolve (network) |
 | `node fix-slugs.mjs` | `fix-slugs.mjs` | Write `verify-portals.mjs`'s suggested ATS slug fixes back to portals.yml (dry run by default, `--fix` to write) |
-| `npm run reposts` | `detect-reposts.mjs` | Flag re-listed (ghost) postings from scan history |
-| `npm run gemini:eval` | `gemini-eval.mjs` | Evaluate a JD with Google Gemini (free-tier alternative) |
-| `npm run ollama:eval` | `ollama-eval.mjs` | Evaluate a JD with a local Ollama model |
-| `npm run openai:eval` | `openai-eval.mjs` | Evaluate a JD via any OpenAI-compatible endpoint |
-| `npm run star` | `match-star.mjs` | Match a behavioural question to your best STAR story (zero-LLM) |
-| `npm run archive` | `archive-posting.mjs` | Save a live job posting as PDF before it disappears |
-| `npm run prepare:application` | `prepare-application.mjs` | Print an ATS prefill summary (read-only, never POSTs) |
-| `npm run build:dashboard` | `build-dashboard.mjs` | Build the Go TUI dashboard binary cross-platform |
+| `pnpm run reposts` | `detect-reposts.mjs` | Flag re-listed (ghost) postings from scan history |
+| `pnpm run gemini:eval` | `gemini-eval.mjs` | Evaluate a JD with Google Gemini (free-tier alternative) |
+| `pnpm run ollama:eval` | `ollama-eval.mjs` | Evaluate a JD with a local Ollama model |
+| `pnpm run openai:eval` | `openai-eval.mjs` | Evaluate a JD via any OpenAI-compatible endpoint |
+| `pnpm run star` | `match-star.mjs` | Match a behavioural question to your best STAR story (zero-LLM) |
+| `pnpm run archive` | `archive-posting.mjs` | Save a live job posting as PDF before it disappears |
+| `pnpm run prepare:application` | `prepare-application.mjs` | Print an ATS prefill summary (read-only, never POSTs) |
+| `pnpm run build:dashboard` | `build-dashboard.mjs` | Build the Go TUI dashboard binary cross-platform |
 | `node upgrade-tests.mjs --pr-gate` | `upgrade-tests.mjs` | Upgrade an install seeded from the newest old release to this commit and prove user data survived (CI gate; `--canary` proves the gate can fail) |
 
 ---
@@ -59,7 +59,7 @@ All scripts live in the project root as `.mjs` modules. Most are exposed via
 Validates that all prerequisites are in place: Node.js >= 18, dependencies installed, Playwright chromium, required files (`cv.md`, `config/profile.yml`, `portals.yml`), fonts directory, and auto-creates `data/`, `output/`, `reports/` if missing.
 
 ```bash
-npm run doctor
+pnpm run doctor
 ```
 
 **Exit codes:** `0` all checks passed, `1` one or more checks failed (fix messages printed).
@@ -71,7 +71,7 @@ npm run doctor
 Health check for pipeline data integrity. Validates `data/applications.md` against nine rules: canonical statuses (per `templates/states.yml`), no duplicate company+role pairs, all report links point to existing files, scores match `X.XX/5` / `N/A` / `DUP`, rows have proper pipe-delimited format, no pending TSVs in `batch/tracker-additions/`, no markdown bold in scores, no two `reports/*.md` files covering the same company+role, and no orphan reports without a tracker row (#1425). The report checks are warning-level: duplicate reports can be legitimate (re-evaluation after a JD change), so they never fail the run.
 
 ```bash
-npm run verify
+pnpm run verify
 ```
 
 **Exit codes:** `0` pipeline clean (zero errors), `1` errors found. Warnings (e.g. possible duplicates) do not cause a non-zero exit.
@@ -83,8 +83,8 @@ npm run verify
 Maps non-canonical statuses to their canonical equivalents and strips markdown bold and dates from the status column. Aliases like `Enviada` become `Aplicado`, `CERRADA` becomes `Descartado`, etc. DUPLICADO info is moved to the notes column.
 
 ```bash
-npm run normalize             # apply changes
-npm run normalize -- --dry-run  # preview without writing
+pnpm run normalize             # apply changes
+pnpm run normalize -- --dry-run  # preview without writing
 ```
 
 Creates a `.bak` backup of `applications.md` before writing.
@@ -98,8 +98,8 @@ Creates a `.bak` backup of `applications.md` before writing.
 Removes duplicate entries from `applications.md` by grouping on normalized company name + fuzzy role match. Keeps the entry with the highest score. If a removed entry had a more advanced pipeline status, that status is promoted to the keeper.
 
 ```bash
-npm run dedup             # apply changes
-npm run dedup -- --dry-run  # preview without writing
+pnpm run dedup             # apply changes
+pnpm run dedup -- --dry-run  # preview without writing
 ```
 
 Creates a `.bak` backup before writing.
@@ -113,9 +113,9 @@ Creates a `.bak` backup before writing.
 Merges batch tracker additions (`batch/tracker-additions/*.tsv`) into `applications.md`. Handles 9-column TSV, 8-column TSV, and pipe-delimited markdown formats. Detects duplicates by report number, entry number, and company+role fuzzy match. Higher-scored re-evaluations update existing entries in place.
 
 ```bash
-npm run merge                 # apply merge
-npm run merge -- --dry-run    # preview without writing
-npm run merge -- --verify     # merge then run verify-pipeline
+pnpm run merge                 # apply merge
+pnpm run merge -- --dry-run    # preview without writing
+pnpm run merge -- --verify     # merge then run verify-pipeline
 ```
 
 Processed TSVs are moved to `batch/tracker-additions/merged/`.
@@ -131,8 +131,8 @@ Validates `portals.yml` before running the scanner. The validator is offline: it
 It reports errors for invalid YAML shape, unknown explicit providers, malformed URLs, empty filter keywords, and invalid local parser blocks. Duplicate enabled company names are warnings because they may be intentional during migrations, but they are worth reviewing.
 
 ```bash
-npm run validate:portals
-npm run validate:portals -- --file templates/portals.example.yml
+pnpm run validate:portals
+pnpm run validate:portals -- --file templates/portals.example.yml
 node validate-portals.mjs --self-test
 ```
 
@@ -212,9 +212,9 @@ The default path is `portals.yml`, overridable with `--file` or the `CAREER_OPS_
 Renders an HTML file to a print-quality, ATS-parseable PDF via headless Chromium. Resolves font paths from `fonts/`, normalizes Unicode for ATS compatibility (em-dashes, smart quotes, zero-width characters), and reports page count and file size.
 
 ```bash
-npm run pdf -- input.html output.pdf
-npm run pdf -- input.html output.pdf --format=letter   # US letter
-npm run pdf -- input.html output.pdf --format=a4        # A4 (default)
+pnpm run pdf -- input.html output.pdf
+pnpm run pdf -- input.html output.pdf --format=letter   # US letter
+pnpm run pdf -- input.html output.pdf --format=a4        # A4 (default)
 ```
 
 **Exit codes:** `0` PDF generated, `1` missing arguments or generation failure.
@@ -226,8 +226,8 @@ npm run pdf -- input.html output.pdf --format=a4        # A4 (default)
 Converts a single screenshot or image (PNG, JPEG, GIF, WEBP, BMP, SVG) into a single-page PDF via headless Chromium — for ATS upload fields that require a PDF specifically and reject images. Embeds the image as a base64 `data:` URI in a minimal HTML page and renders it with `page.pdf()`, sized to the image's own pixel dimensions so the page is neither cropped nor padded. Zero new dependencies — reuses the `playwright` dependency `generate-pdf.mjs` already uses, and is a deliberately standalone script: it does not go through `generate-pdf.mjs`, so it is never subject to that script's cv.md section-order validation.
 
 ```bash
-npm run img-to-pdf -- screenshot.png output.pdf
-npm run img-to-pdf -- screenshot.png output.pdf --force   # overwrite an existing output file
+pnpm run img-to-pdf -- screenshot.png output.pdf
+pnpm run img-to-pdf -- screenshot.png output.pdf --force   # overwrite an existing output file
 node img-to-pdf.mjs --self-test
 ```
 
@@ -255,7 +255,7 @@ node build-cv-latex.mjs --test
 Validates that the career-ops setup is internally consistent: `cv.md` exists and is not too short, `config/profile.yml` exists with required fields, no hardcoded metrics in `modes/_shared.md` or `batch/batch-prompt.md`, and `article-digest.md` freshness (warns if older than 30 days).
 
 ```bash
-npm run sync-check
+pnpm run sync-check
 ```
 
 **Exit codes:** `0` no errors (warnings allowed), `1` errors found.
@@ -267,9 +267,9 @@ npm run sync-check
 Analyzes application outcomes, scores, archetypes, blockers, remote policy, and company size from `data/applications.md` and linked reports. New reports should include `## Machine Summary` YAML; `analyze-patterns.mjs` uses it first and falls back to legacy markdown parsing for older reports.
 
 ```bash
-npm run patterns
-npm run patterns -- --summary
-npm run patterns -- --min-threshold 3
+pnpm run patterns
+pnpm run patterns -- --summary
+pnpm run patterns -- --min-threshold 3
 node analyze-patterns.mjs --self-test
 ```
 
@@ -282,9 +282,9 @@ node analyze-patterns.mjs --self-test
 Aggregates skill gaps across every tracked report (#1520, phase 1). Extracts skill tokens from each report's Machine Summary `hard_stops`/`soft_gaps` and Gap table, removes skills already present in `cv.md`/`config/profile.yml` (exact-alias matching only — an umbrella term never suppresses a specific skill), and weights each gap by inverse report score (`5.0 − score`, counted once per report). Tiers (Critical/High/Medium/Low) use fixed thresholds over the share of low-fit (score < 4.0) reports naming the gap. Output carries `schema_version` so the `upskill` mode's diff-vs-previous section never compares across extraction-rule changes, plus coverage stats (`reportsWithMachineSummary` vs `reportsRead`). The script emits data only; the `upskill` mode reads the tiered `gaps` JSON and, in phase 2b (#1740), layers a **web-searched learning plan** (free-first resources per Critical/High gap — plus Medium when the map is small) onto the aggregate report. The plan is generated by the agent, not this script — no web-search logic lives in `upskill.mjs`.
 
 ```bash
-npm run upskill
-npm run upskill -- --summary
-npm run upskill -- --min-reports 3
+pnpm run upskill
+pnpm run upskill -- --summary
+pnpm run upskill -- --min-reports 3
 node upskill.mjs --url-text https://boards.greenhouse.io/acme/jobs/123   # targeted: gaps for one JD
 node upskill.mjs --url-text ./jds/my-job.txt                            # targeted: --url-text also takes a local file
 node upskill.mjs --self-test
@@ -444,7 +444,7 @@ Two finding types:
 Each finding copies the row's `sources`, so whoever picks it up knows exactly where to re-verify. Malformed or missing dates produce a warning entry and the row is skipped — never a crash: once an array qualifies as a row-set (≥1 row with `as_of`), a sibling row that *forgot* its mandatory `as_of` warns too, instead of silently vanishing from validation. All date math is UTC-midnight calendar math (no time-of-day drift); dates in tables are quoted `YYYY-MM-DD` strings.
 
 ```bash
-npm run freshness
+pnpm run freshness
 node check-table-freshness.mjs                    # JSON
 node check-table-freshness.mjs --summary          # human-readable table
 node check-table-freshness.mjs --max-age-months 6 # override review threshold
@@ -477,7 +477,7 @@ node rejection-latency.mjs --self-test
 Checks whether a newer version of career-ops is available upstream. Outputs JSON to stdout:
 
 ```bash
-npm run update:check
+pnpm run update:check
 ```
 
 Possible JSON responses:
@@ -495,10 +495,10 @@ Possible JSON responses:
 
 ## update
 
-Applies the upstream update. Creates a timestamped backup branch (`backup-pre-update-<version>-<YYYYMMDDTHHMMSSZ>`), fetches from the canonical repo, checks out only system-layer files, runs `npm install`, and commits. The timestamp is derived from UTC ISO time with separators and milliseconds removed (for example, `backup-pre-update-1.8.1-20260608T071302Z`). User-layer files (`cv.md`, `config/profile.yml`, `data/`, etc.) are never touched.
+Applies the upstream update. Creates a timestamped backup branch (`backup-pre-update-<version>-<YYYYMMDDTHHMMSSZ>`), fetches from the canonical repo, checks out only system-layer files, runs `pnpm install`, and commits. The timestamp is derived from UTC ISO time with separators and milliseconds removed (for example, `backup-pre-update-1.8.1-20260608T071302Z`). User-layer files (`cv.md`, `config/profile.yml`, `data/`, etc.) are never touched.
 
 ```bash
-npm run update
+pnpm run update
 ```
 
 **Exit codes:** `0` success, `1` lock conflict or safety violation.
@@ -510,7 +510,7 @@ npm run update
 Restores system-layer files from the most recent backup branch created during an update. Rollback prefers the newest timestamped branch matching `backup-pre-update-<version>-<YYYYMMDDTHHMMSSZ>` and still accepts legacy `backup-pre-update-<version>` branches for older installs.
 
 ```bash
-npm run rollback
+pnpm run rollback
 ```
 
 **Exit codes:** `0` success, `1` no backup branch found or git error.
@@ -524,11 +524,11 @@ Tests whether job posting URLs are still live. Two rungs: a zero-token ATS API c
 Per-job ATS endpoints (Greenhouse, Lever, Workday) treat a 200 as proof the posting is live; Ashby's public API is org-level (the whole job board), so that rung parses the board and confirms the specific job id is still listed. A definitive 404/410 from any ATS API is authoritative and short-circuits the browser check entirely — zero tokens, no browser launch.
 
 ```bash
-npm run liveness -- https://example.com/job/123
-npm run liveness -- https://a.com/job/1 https://b.com/job/2
-npm run liveness -- --file urls.txt
-npm run liveness -- --no-fallback https://a.com/job/1   # stay fully headless (no headed retry on anti-bot walls)
-npm run liveness -- --throttle=5000 --file urls.txt      # jittered wait between checks (rate-based WAFs)
+pnpm run liveness -- https://example.com/job/123
+pnpm run liveness -- https://a.com/job/1 https://b.com/job/2
+pnpm run liveness -- --file urls.txt
+pnpm run liveness -- --no-fallback https://a.com/job/1   # stay fully headless (no headed retry on anti-bot walls)
+pnpm run liveness -- --throttle=5000 --file urls.txt      # jittered wait between checks (rate-based WAFs)
 ```
 
 Each URL gets a verdict: `active`, `expired`, or `uncertain` with a reason.
@@ -561,7 +561,7 @@ When the ATS provider's list API returns a description, each new offer is finger
 **Company blacklist (#1742):** if `data/blacklist.md` exists (user layer, opt-in — see `templates/blacklist.example.md`), postings from listed companies are skipped, matched case- and punctuation-insensitively with the same company normalization the tracker scripts share. Skips are never silent: the run summary reports `N skipped (blacklist)` and the count is persisted to `data/scan-runs.tsv` as `filtered_blacklist`. Pass `--include-blacklisted` to bypass the filter for auditing — matching postings flow through annotated (`note: blacklisted: {reason}` in `data/pipeline.md`). No blacklist file = no filtering; nothing ever adds a company to the list automatically.
 
 ```bash
-npm run scan
+pnpm run scan
 node scan.mjs --include-blacklisted   # audit: let blacklisted companies through, annotated
 ```
 
@@ -614,7 +614,7 @@ How it works:
 Same detection logic applies to `scan.mjs` (the standard portal scanner) — the sub-section above is shared between both commands.
 
 ```bash
-npm run scan:full                              # all ATS directories, last 3 days
+pnpm run scan:full                              # all ATS directories, last 3 days
 node scan-ats-full.mjs --since 7               # postings from the last 7 days
 node scan-ats-full.mjs --ats greenhouse,workday # subset of sources
 node scan-ats-full.mjs --limit 200             # max companies per ATS
@@ -622,8 +622,8 @@ node scan-ats-full.mjs --dry-run               # preview without writing
 node scan-ats-full.mjs --liveness              # Playwright-verify matches first
 node scan-ats-full.mjs --include-blacklisted   # audit blacklist matches instead of skipping
 node scan-ats-full.mjs --md-out notes/scans    # also write a dated markdown digest
-npm run scan:seeds                             # probe VC portfolio seed companies (--seeds yc,a16z)
-npm run scan:yc                                # Y Combinator portfolio only (--seeds yc)
+pnpm run scan:seeds                             # probe VC portfolio seed companies (--seeds yc,a16z)
+pnpm run scan:yc                                # Y Combinator portfolio only (--seeds yc)
 ```
 
 `--seeds <list>` fetches comma-separated VC portfolio sources (e.g. `yc,a16z`)
@@ -642,9 +642,9 @@ How many upstream queries that becomes depends on the OS resolver: `dns.lookup()
 Cache hits and lookups that coalesce onto an in-flight one are free, so only uncached, non-coalesced lookup keys count against the ceiling — a hostname not in the cache, or a cached one requested with different resolver options (the cache key is hostname plus `family`/`all`/`hints`/`verbatim`).
 
 ```bash
-CAREER_OPS_DNS_LOOKUPS_PER_MIN=800 npm run scan:full   # raise the ceiling
-CAREER_OPS_DNS_LOOKUPS_PER_MIN=0 npm run scan:full     # no pacing (pre-#2229 behaviour)
-CAREER_OPS_NO_DNS_CACHE=1 npm run scan:full            # no DNS cache AND no pacing
+CAREER_OPS_DNS_LOOKUPS_PER_MIN=800 pnpm run scan:full   # raise the ceiling
+CAREER_OPS_DNS_LOOKUPS_PER_MIN=0 pnpm run scan:full     # no pacing (pre-#2229 behaviour)
+CAREER_OPS_NO_DNS_CACHE=1 pnpm run scan:full            # no DNS cache AND no pacing
 ```
 
 The cost is real: a full Workday + iCIMS sweep becomes DNS-bound at roughly 35 minutes. Raise the ceiling if your resolver has the budget — but if you see `fetch failed` in bulk from one ATS section, suspect the resolver before the boards.
@@ -658,11 +658,11 @@ The cost is real: a full Workday + iCIMS sweep becomes DNS-bound at roughly 35 m
 Review-first discovery for companies that recently raised funding. It reads structured public RSS/API sources and prints a candidate report for manual review. It never edits `portals.yml` and does not probe company websites.
 
 ```bash
-npm run company:funded -- --dry-run --limit 20
-npm run company:funded -- --dry-run --limit 20 --months 3 --json
-npm run company:funded -- --dry-run --sort score --limit 20
-npm run company:funded -- --sources techcrunch,prnewswire,guardian,hn
-npm run company:funded -- --self-test
+pnpm run company:funded -- --dry-run --limit 20
+pnpm run company:funded -- --dry-run --limit 20 --months 3 --json
+pnpm run company:funded -- --dry-run --sort score --limit 20
+pnpm run company:funded -- --sources techcrunch,prnewswire,guardian,hn
+pnpm run company:funded -- --self-test
 ```
 
 Defaults: last 3 months, `--sort date`, sources `techcrunch,prnewswire,guardian,hn`. `--sort score` ranks by source and funding-detail confidence instead.
@@ -727,7 +727,7 @@ Multiple matches print as a table; zero matches print a clean message.
 Manual, no-Gmail input path into `reply-watch.mjs`'s classification pipeline (#1802). `reply-watch.mjs` already classifies employer replies and matches them to tracker rows, but its only input is `data/reply-candidates.json`, and the only planned way to populate that file is a Gmail scanner (#1583, unbuilt, requires OAuth inbox-read access). `paste-reply.mjs` normalizes a pasted (or file-provided) email's subject/from/body into the exact candidate shape `reply-watch.mjs` expects and appends it — existing candidates are never overwritten. It does not classify the reply itself (that stays `reply-watch.mjs`'s job) and never runs `reply-watch.mjs` or touches `data/applications.md`.
 
 ```bash
-npm run paste-reply                    # interactive: prompts for subject, from, body
+pnpm run paste-reply                    # interactive: prompts for subject, from, body
 node paste-reply.mjs --file email.txt  # read subject/from/body from a file
 ```
 
@@ -752,10 +752,10 @@ Runs the pipeline on OpenRouter free models with automatic fallback — no
 Claude Code CLI required.
 
 ```bash
-npm run or:scan                 # scan configured companies for new listings
-npm run or:eval -- <url>        # evaluate a job by URL (no URL: paste interactively)
-npm run or:pipeline             # process pending URLs
-npm run or:apply                # application assistance
+pnpm run or:scan                 # scan configured companies for new listings
+pnpm run or:eval -- <url>        # evaluate a job by URL (no URL: paste interactively)
+pnpm run or:pipeline             # process pending URLs
+pnpm run or:apply                # application assistance
 ```
 
 ---
@@ -768,7 +768,7 @@ back to `pipeline.md`, so batch-processed offers would otherwise be
 re-surfaced by every later scan or pipeline run.
 
 ```bash
-npm run reconcile
+pnpm run reconcile
 ```
 
 ---
@@ -780,7 +780,7 @@ Renders a cover-letter JSON payload to PDF: fills
 same Playwright pipeline as CVs.
 
 ```bash
-npm run cover-letter -- payload.json
+pnpm run cover-letter -- payload.json
 node generate-cover-letter.mjs --payload payload.json --out output/slug-cover.pdf
 ```
 
@@ -794,7 +794,7 @@ probes the public Greenhouse / Ashby / Lever endpoints to confirm each slug
 actually resolves.
 
 ```bash
-npm run verify:portals
+pnpm run verify:portals
 ```
 
 ---
@@ -806,7 +806,7 @@ company, and flags any company+role listed 2+ times with different URLs
 within a 90-day window — a strong ghost-job / re-listing signal.
 
 ```bash
-npm run reposts                 # JSON
+pnpm run reposts                 # JSON
 node detect-reposts.mjs --summary
 ```
 
@@ -824,10 +824,10 @@ CLI:
   DeepSeek, LM Studio, llama.cpp, vLLM, ...)
 
 ```bash
-npm run gemini:eval -- "We are looking for a Senior AI Engineer..."
+pnpm run gemini:eval -- "We are looking for a Senior AI Engineer..."
 node gemini-eval.mjs --file ./jds/my-job.txt
-npm run ollama:eval -- "JD text"
-npm run openai:eval -- "JD text"
+pnpm run ollama:eval -- "JD text"
+pnpm run openai:eval -- "JD text"
 ```
 
 ---
@@ -840,7 +840,7 @@ text (optionally plus a JD file), and returns the top matches formatted to
 ATS paste length (250-500 words).
 
 ```bash
-npm run star -- "Tell me about a time you disagreed with a decision"
+pnpm run star -- "Tell me about a time you disagreed with a decision"
 ```
 
 ---
@@ -852,7 +852,7 @@ postings vanish once filled, and the original requirements matter for
 interview prep and salary negotiation evidence.
 
 ```bash
-npm run archive -- https://example.com/job/123
+pnpm run archive -- https://example.com/job/123
 ```
 
 ---
@@ -866,7 +866,7 @@ open the apply URL, and submit yourself. See
 [APPLY_AUTOFILL.md](APPLY_AUTOFILL.md).
 
 ```bash
-npm run prepare:application -- --url https://boards.greenhouse.io/acme/jobs/123
+pnpm run prepare:application -- --url https://boards.greenhouse.io/acme/jobs/123
 ```
 
 ---
@@ -879,8 +879,8 @@ platform-correct output name (`career-dashboard.exe` on Windows, else
 binary on Windows. Requires Go 1.24+.
 
 ```bash
-npm run build:dashboard
-npm run serve:dashboard    # or run the TUI directly without building
+pnpm run build:dashboard
+pnpm run serve:dashboard    # or run the TUI directly without building
 ```
 
 ---

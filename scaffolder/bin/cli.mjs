@@ -13,7 +13,7 @@ import { ensureSkillEntrypoints } from "./skill-entrypoints.mjs";
 
 const REPO = "https://github.com/santifer/career-ops.git";
 const LATEST_RELEASE = "https://api.github.com/repos/santifer/career-ops/releases/latest";
-const NPM = process.platform === "win32" ? "npm.cmd" : "npm";
+const PNPM = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 
 // career-ops is AI-agnostic: every one of these CLIs reads AGENTS.md and works
 // out of the box. We only detect them to tailor the final message — we never
@@ -114,12 +114,15 @@ async function main() {
     die("git clone failed. Check your network connection and try again.");
   }
 
-  // 2. Install dependencies.
-  console.log("\n→ Installing dependencies (npm install) ...");
+  // 2. Install dependencies. career-ops uses pnpm (package.json →
+  // "packageManager"); a missing pnpm is the likeliest failure here, so say
+  // how to get it rather than just reporting a non-zero exit.
+  console.log("\n→ Installing dependencies (pnpm install) ...");
   try {
-    execFileSync(NPM, ["install"], { cwd: target, stdio: "inherit" });
+    execFileSync(PNPM, ["install"], { cwd: target, stdio: "inherit" });
   } catch {
-    console.warn('\n! npm install failed — you can re-run it manually later with "npm install".');
+    console.warn('\n! pnpm install failed — you can re-run it manually later with "pnpm install".');
+    console.warn("  If pnpm is not installed:  corepack enable pnpm   (or: npm i -g pnpm)");
   }
 
   // 2b. Bootstrap CLI skill entrypoints (covers CLIs added after the cloned release).
@@ -149,7 +152,7 @@ async function main() {
   console.log("roles — just by chatting. Nothing to configure by hand.");
   console.log("\ncareer-ops is AI-agnostic — Claude Code, Codex, Qwen, OpenCode, Copilot, Antigravity and Grok all work.");
   console.log("\nOptional (for PDF generation):");
-  console.log("  npx playwright install chromium\n");
+  console.log("  pnpm exec playwright install chromium\n");
 }
 
 main().catch((err) => die(err?.message || String(err)));

@@ -61,7 +61,7 @@ if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
     node archive-posting.mjs "https://jobs.ashbyhq.com/anthropic/abc123"
     node archive-posting.mjs "https://boards.greenhouse.io/openai/jobs/456" --company=OpenAI
     node archive-posting.mjs --pipeline
-    npm run archive -- "https://jobs.lever.co/elevenlabs/abc"
+    pnpm run archive -- "https://jobs.lever.co/elevenlabs/abc"
 `);
   process.exit(0);
 }

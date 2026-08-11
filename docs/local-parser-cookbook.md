@@ -29,7 +29,7 @@ Most local parsers are company-specific: the script already knows the source URL
 
 In agent scan mode (`/career-ops scan`), Playwright and API niveles send large page or JSON payloads into the model. When Nivel 0 succeeds, `modes/scan.md` requires skipping those niveles for the same company (`local_parser_ok`).
 
-Measured benchmarks (Cohere + Mobileye fixtures, `tiktoken` `cl100k_base`, Playwright vs parser vs API) live on branch `feature/local-parser-integration-tests` with `npm run test:scan-tokens` and full tables in that branch's copy of this cookbook.
+Measured benchmarks (Cohere + Mobileye fixtures, `tiktoken` `cl100k_base`, Playwright vs parser vs API) live on branch `feature/local-parser-integration-tests` with `pnpm run test:scan-tokens` and full tables in that branch's copy of this cookbook.
 
 ## Stdout Contract
 

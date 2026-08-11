@@ -11,8 +11,8 @@ added in separately reviewed follow-ups once this harness is stable.
 Install Chromium and Poppler (`pdftotext`), then run:
 
 ```bash
-npx playwright install chromium
-npm run test:cv-visual
+pnpm exec playwright install chromium
+pnpm run test:cv-visual
 ```
 
 Rendered PDFs and PNG previews are written to
@@ -24,8 +24,8 @@ actual, and pixel-diff images under `test-results/cv-visual-results/`.
 When a reviewed template change intentionally alters layout:
 
 ```bash
-npm run test:cv-visual:update
-npm run test:cv-visual
+pnpm run test:cv-visual:update
+pnpm run test:cv-visual
 ```
 
 Review every changed PNG rather than accepting snapshots mechanically. Update

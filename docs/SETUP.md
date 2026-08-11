@@ -53,7 +53,7 @@ codex exec "Run career-ops tracker mode and summarize the current statuses."
 ```bash
 git clone https://github.com/santifer/career-ops.git
 cd career-ops
-npm install
+pnpm install
 ```
 
 Then open your AI CLI in the folder — the same first-run onboarding applies. Use this path if you want to track a specific branch, contribute, or audit the code before installing dependencies.
@@ -65,7 +65,7 @@ Then open your AI CLI in the folder — the same first-run onboarding applies. U
 PDFs are rendered with a headless Chromium. Install it once per machine:
 
 ```bash
-npx playwright install chromium
+pnpm exec playwright install chromium
 ```
 
 ## Available Commands
@@ -91,6 +91,6 @@ node verify-pipeline.mjs     # Check pipeline integrity
 ## Build Dashboard (Optional)
 
 ```bash
-npm run serve:dashboard     # Opens TUI pipeline viewer
-npm run build:dashboard     # Optional: build the standalone binary
+pnpm run serve:dashboard     # Opens TUI pipeline viewer
+pnpm run build:dashboard     # Optional: build the standalone binary
 ```

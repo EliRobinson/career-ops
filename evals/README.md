@@ -80,8 +80,8 @@ phantom subdirectory.
 ## Running
 
 ```bash
-npm run eval:golden -- --replay --model cheap-stub   # offline, deterministic, $0
-npm run eval:golden -- --live   --model gpt-4o-mini  # real call via openai-eval.mjs (needs key + cv.md)
+pnpm run eval:golden -- --replay --model cheap-stub   # offline, deterministic, $0
+pnpm run eval:golden -- --live   --model gpt-4o-mini  # real call via openai-eval.mjs (needs key + cv.md)
 ```
 
 Replay is the CI-friendly path: no API keys, no `cv.md`, fully deterministic.

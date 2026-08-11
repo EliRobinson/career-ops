@@ -2,7 +2,7 @@
 //
 // web/ used to carry two conventions at once: suites under web/tests/ plus two
 // hand-enumerated at the web root, listed by name in web/package.json's `test`
-// script. A suite missing from that list never ran and `npm test` still exited
+// script. A suite missing from that list never ran and `pnpm test` still exited
 // 0. #1440, the parent issue, named that failure mode directly — "the runner
 // should also fail hard if the glob matches zero files, so a path typo can't
 // silently turn CI green" — and removed it from the root suite. web/ kept it,
@@ -17,7 +17,7 @@
 //      validates: if the glob breaks, the guard silently stops running too.
 // Same reach-into-web/ pattern as test-all.mjs's 55.3c/55.3d freezes (#2369).
 //
-// ONE responsibility: web/'s suites must be reachable by what `npm test`
+// ONE responsibility: web/'s suites must be reachable by what `pnpm test`
 // actually runs. Every assertion below is a facet of that — including the
 // engines floor, which is checked because a glob operand is unrunnable below
 // Node 22, not as general Node policy.
@@ -177,7 +177,7 @@ if (!existsSync(WEB_PKG)) {
     } else {
       fail(`web suites outside the discovered layout (#2360): ${misplaced.join(', ')}`
         + ' — web tests live at web/tests/{dir}/{module}.test.mjs mirroring web/src/,'
-        + " and must end in .test.mjs for `npm test`'s glob to run them");
+        + " and must end in .test.mjs for `pnpm test`'s glob to run them");
     }
   });
 
@@ -187,7 +187,7 @@ if (!existsSync(WEB_PKG)) {
       pass('web/package.json test script enumerates no suites by name');
     } else {
       fail(`web/package.json test script names suites explicitly (#2360): ${enumerated.join(', ')}`
-        + ' — a suite missing from a hand-maintained list never runs and `npm test` still exits 0;'
+        + ' — a suite missing from a hand-maintained list never runs and `pnpm test` still exits 0;'
         + ' rely on the tests/**/*.test.mjs glob instead');
     }
   });
@@ -275,7 +275,7 @@ if (!existsSync(WEB_PKG)) {
       pass(`web engines.node ${engines} can run the declared glob (>= ${required})`);
     } else {
       fail(`web engines.node ${engines} is below >=${required} (#2360) — \`node --test\``
-        + ' does not expand CLI globs there, so `npm test` would find 0 suites and exit 1');
+        + ' does not expand CLI globs there, so `pnpm test` would find 0 suites and exit 1');
     }
   });
 }

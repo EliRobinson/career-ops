@@ -261,7 +261,7 @@ To prevent unnecessary API costs or hitting rate limits, implement the following
 4. **Use `--verify` on Scans**:
    When running job board scans, use the liveness verifier to filter out expired postings before they enter your pipeline. This prevents wasting LLM tokens evaluating closed jobs:
    ```bash
-   npm run scan -- --verify
+   pnpm run scan -- --verify
    ```
 
 ---
@@ -356,10 +356,10 @@ No Claude Code CLI required — uses OpenRouter free models with automatic fallb
 **npm shortcuts** (cover the whole pipeline):
 
 ```bash
-npm run or:scan        # Scan portals for new listings (Greenhouse API, 0 tokens)
-npm run or:pipeline    # Process all pending URLs from data/pipeline.md
-npm run or:eval        # Evaluate a single offer (paste URL or text)
-npm run or:apply       # Generate draft application answers for a report
+pnpm run or:scan        # Scan portals for new listings (Greenhouse API, 0 tokens)
+pnpm run or:pipeline    # Process all pending URLs from data/pipeline.md
+pnpm run or:eval        # Evaluate a single offer (paste URL or text)
+pnpm run or:apply       # Generate draft application answers for a report
 ```
 
 **Usage**
@@ -387,7 +387,7 @@ node openrouter-runner.mjs help              # Show this help
 If you want **zero network calls** and complete privacy, run evaluations against a local Ollama instance:
 
 ```bash
-npm run ollama:eval
+pnpm run ollama:eval
 ```
 
 This calls `ollama-eval.mjs` which hits your local Ollama server. No API key, no internet, no cost. See [Section 5](#5-local-llm-tradeoffs-ollama--llamacpp) for model size recommendations (32B+ minimum for reliable scoring).
@@ -397,7 +397,7 @@ This calls `ollama-eval.mjs` which hits your local Ollama server. No API key, no
 Point at **any** endpoint that speaks the OpenAI chat-completions API — NVIDIA NIM (free tier), Zhipu GLM, Together, Groq, LM Studio, llama.cpp, vLLM, or even Ollama's `/v1` route:
 
 ```bash
-npm run openai:eval
+pnpm run openai:eval
 ```
 
 Configure via `.env`:

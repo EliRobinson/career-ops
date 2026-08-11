@@ -20,7 +20,7 @@
  * Usage:
  *   node eval-golden.mjs --replay --model cheap-stub     # offline, deterministic ($0)
  *   node eval-golden.mjs --live   --model gpt-4o-mini    # calls openai-eval.mjs (needs key + cv.md)
- *   npm run eval:golden -- --replay --model cheap-stub
+ *   pnpm run eval:golden -- --replay --model cheap-stub
  */
 
 import { readFileSync, readdirSync, existsSync, writeFileSync, mkdtempSync, rmSync } from 'fs';

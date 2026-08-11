@@ -31,11 +31,18 @@ RUN set -eux; \
 
 WORKDIR /app
 
-# Prime npm deps in a layer so rebuilds stay fast.
+# pnpm is the project's package manager; corepack ships with the base
+# image's Node and reads the exact version from package.json's
+# "packageManager" field.
+RUN corepack enable pnpm
+
+# Prime deps in a layer so rebuilds stay fast.
 # Pin playwright to the version that matches the base image's bundled chromium.
-COPY package.json package-lock.json* ./
-RUN npm install --no-audit --no-fund \
- && npm install --no-audit --no-fund --save-exact playwright@1.62.1
+# The root lockfile is intentionally untracked (see .gitignore), hence
+# --no-frozen-lockfile: there may be no pnpm-lock.yaml to freeze against.
+COPY package.json pnpm-lock.yaml* ./
+RUN pnpm install --no-frozen-lockfile \
+ && pnpm add --save-exact playwright@1.62.1
 
 # The rest of the project is bind-mounted at runtime via docker compose,
 # so we don't COPY sources here — keeps the image generic and lets local

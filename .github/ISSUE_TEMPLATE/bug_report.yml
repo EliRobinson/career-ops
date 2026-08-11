@@ -52,6 +52,6 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: Output of npm run doctor
+      label: Output of pnpm run doctor
       description: Paste the output here (helps us diagnose setup issues)
       render: shell

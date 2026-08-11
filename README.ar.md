@@ -91,11 +91,11 @@
 ```bash
 # 1. استنساخ المشروع وتثبيت الاعتماديات
 git clone https://github.com/santifer/career-ops.git
-cd career-ops && npm install
-npx playwright install chromium   # مطلوب لتوليد ملفات الـ PDF وسحب البيانات
+cd career-ops && pnpm install
+pnpm exec playwright install chromium   # مطلوب لتوليد ملفات الـ PDF وسحب البيانات
 
 # 2. فحص إعدادات النظام
-npm run doctor                     # للتحقق من جاهزية كل المتطلبات البرمجية
+pnpm run doctor                     # للتحقق من جاهزية كل المتطلبات البرمجية
 
 # 3. تكوين البيانات الشخصية
 cp config/profile.example.yml config/profile.yml  # قم بتعديله وإضافة معلوماتك
@@ -124,7 +124,7 @@ claude   # افتح واجهة Claude Code في هذا المجلد
 
 ```bash
 # 1. تثبيت Gemini CLI
-npm install -g @google/gemini-cli
+pnpm add -g @google/gemini-cli
 #    تتم المصادقة عبر حساب جوجل (مجانًا) عند أول تشغيل
 
 # 2. تشغيل جميناي داخل مجلد المشروع
@@ -149,12 +149,12 @@ cp .env.example .env
 # قم بتحرير الملف .env واكتب فيه: GEMINI_API_KEY=your_key_here
 
 # 2. تثبيت الاعتماديات
-npm install
+pnpm install
 
 # 3. تقييم تفاصيل الوظيفة مباشرة
 node gemini-eval.mjs "We are looking for a Senior AI Engineer..."
 node gemini-eval.mjs --file ./jds/my-job.txt
-npm run gemini:eval -- "نص تفاصيل الوظيفة هنا"
+pnpm run gemini:eval -- "نص تفاصيل الوظيفة هنا"
 ```
 
 ---

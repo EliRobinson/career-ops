@@ -34,6 +34,13 @@ jobs:
         with:
           node-version: 24
           registry-url: "https://registry.npmjs.org"
+      # DELIBERATELY still npm, not pnpm (the rest of the repo migrated).
+      # Trusted Publishing (OIDC) is an npm-client feature: only npm >= 11.5.1
+      # can mint the id-token exchange against the trusted publisher configured
+      # on npmjs.com. `pnpm publish` has no equivalent and would need a
+      # long-lived NPM_TOKEN secret instead — strictly worse. The scaffolder has
+      # zero dependencies, so nothing here needs a package manager anyway.
+      #
       # Trusted Publishing (OIDC): npm >= 11.5.1 authenticates via the workflow's
       # id-token against the trusted publisher configured on npmjs.com — no token.
       # setup-node ships an older npm, so upgrade before publishing.
