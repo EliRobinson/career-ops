@@ -1,0 +1,128 @@
+// Tests for normalizing a pasted job posting URL.
+//
+// The LinkedIn cases are the reason this module exists: linkedin.com/jobs/view/<id>
+// served to a headless agent is an authwall, so an evaluation run against it produces
+// a thin or invented report that still lands in the tracker looking legitimate. The
+// public guest endpoint returns the real posting body, so we fetch that and record
+// the canonical link.
+//
+// Run:  node --test tests/lib/job-url.test.mjs
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { normalizeJobUrl, parsePastedUrls, companyFromJobUrl } from "../../src/lib/job-url.mjs";
+
+test("normalizeJobUrl: a plain ATS posting passes through unchanged", () => {
+  // Given a Greenhouse posting, which a headless agent can already read
+  const r = normalizeJobUrl("https://boards.greenhouse.io/acme/jobs/4567890");
+
+  // Then nothing is rewritten and the fetch target IS the canonical URL
+  assert.equal(r.ok, true);
+  assert.equal(r.kind, "generic");
+  assert.equal(r.url, "https://boards.greenhouse.io/acme/jobs/4567890");
+  assert.equal(r.fetchUrl, r.url);
+});
+
+test("normalizeJobUrl: a LinkedIn job view resolves to the guest endpoint", () => {
+  // Given the URL shape the user actually copies from the address bar
+  const r = normalizeJobUrl("https://www.linkedin.com/jobs/view/4434693435/");
+
+  // Then we fetch the public mirror...
+  assert.equal(r.ok, true);
+  assert.equal(r.kind, "linkedin");
+  assert.equal(r.fetchUrl, "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4434693435");
+  // ...and record the link the user can actually click later
+  assert.equal(r.url, "https://www.linkedin.com/jobs/view/4434693435/");
+});
+
+test("normalizeJobUrl: LinkedIn slug-and-id and collection URLs both yield the id", () => {
+  // Given the two other shapes LinkedIn hands out: a titled permalink...
+  const slug = normalizeJobUrl("https://www.linkedin.com/jobs/view/senior-ai-engineer-at-acme-4434693435");
+  // ...and the collections/search view, where the id is only in the query string
+  const coll = normalizeJobUrl("https://www.linkedin.com/jobs/collections/recommended/?currentJobId=4434693435");
+
+  // Then both normalize to the same posting
+  assert.equal(slug.fetchUrl, "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4434693435");
+  assert.equal(coll.fetchUrl, "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4434693435");
+  assert.equal(slug.url, coll.url);
+});
+
+test("normalizeJobUrl: a LinkedIn link with no job id is refused with advice", () => {
+  // Given a LinkedIn page that is not one posting, evaluating it would score a
+  // listings page. Refuse rather than fetch something meaningless.
+  const r = normalizeJobUrl("https://www.linkedin.com/jobs/search/?keywords=ai");
+
+  assert.equal(r.ok, false);
+  assert.match(r.error, /single job posting/i);
+});
+
+test("normalizeJobUrl: a lookalike host is not treated as LinkedIn", () => {
+  // Given the substring trap that sourceFromUrl already guards against
+  const r = normalizeJobUrl("https://linkedin.com.evil.example/jobs/view/4434693435/");
+
+  // Then it stays generic — no guest URL is minted for a host we do not trust
+  assert.equal(r.ok, true);
+  assert.equal(r.kind, "generic");
+  assert.equal(r.fetchUrl, r.url);
+});
+
+test("normalizeJobUrl: tracking parameters are stripped, real ones kept", () => {
+  // Given a link copied out of an email or a share sheet
+  const r = normalizeJobUrl("https://jobs.lever.co/acme/abc-123?utm_source=newsletter&trk=public_jobs&gh_jid=99");
+
+  // Then the noise is gone and a meaningful query parameter survives
+  assert.equal(r.ok, true);
+  assert.ok(!r.url.includes("utm_source"));
+  assert.ok(!r.url.includes("trk="));
+  assert.ok(r.url.includes("gh_jid=99"));
+});
+
+test("normalizeJobUrl: a bare host gets https, junk is refused", () => {
+  // Given a paste with no scheme
+  const bare = normalizeJobUrl("boards.greenhouse.io/acme/jobs/1");
+  assert.equal(bare.ok, true);
+  assert.equal(bare.url, "https://boards.greenhouse.io/acme/jobs/1");
+
+  // Given inputs that are not http(s) postings at all
+  for (const bad of ["javascript:alert(1)", "file:///etc/passwd", "ftp://x.example/j", "   ", "not a url", ""]) {
+    assert.equal(normalizeJobUrl(bad).ok, false, bad);
+  }
+  // And a non-string, which the client can hand us from a stray state value
+  assert.equal(normalizeJobUrl(undefined).ok, false);
+});
+
+test("parsePastedUrls: splits on whitespace and reports bad lines individually", () => {
+  // Given a multi-line paste where one line is broken
+  const text = `https://boards.greenhouse.io/acme/jobs/1
+  not-a-url-at-all::
+https://www.linkedin.com/jobs/view/4434693435/`;
+
+  const { entries, errors } = parsePastedUrls(text);
+
+  // Then the good ones still run and the bad one is named, not silently dropped
+  assert.equal(entries.length, 2);
+  assert.equal(entries[1].kind, "linkedin");
+  assert.equal(errors.length, 1);
+  assert.match(errors[0].raw, /not-a-url-at-all/);
+});
+
+test("parsePastedUrls: the same posting pasted twice is kept once", () => {
+  // Given a duplicate paste, deduped on the CANONICAL url so the two LinkedIn
+  // spellings of one job collapse together
+  const { entries } = parsePastedUrls(
+    "https://www.linkedin.com/jobs/view/4434693435/ https://www.linkedin.com/jobs/view/senior-ai-engineer-at-acme-4434693435",
+  );
+
+  assert.equal(entries.length, 1);
+});
+
+test("companyFromJobUrl: derives the company from an ATS slug, else the host", () => {
+  // Given the three ATS shapes whose URL carries the company
+  assert.equal(companyFromJobUrl("https://boards.greenhouse.io/acme/jobs/1"), "acme");
+  assert.equal(companyFromJobUrl("https://jobs.lever.co/stripe-inc/abc"), "stripe-inc");
+  assert.equal(companyFromJobUrl("https://jobs.ashbyhq.com/ramp/xyz"), "ramp");
+  // Given a host that carries no company slug, fall back to the registrable name
+  assert.equal(companyFromJobUrl("https://careers.example.com/jobs/1"), "example");
+  // Given LinkedIn, the company is simply not in the URL — say nothing rather than guess
+  assert.equal(companyFromJobUrl("https://www.linkedin.com/jobs/view/4434693435/"), "");
+});
