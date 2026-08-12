@@ -21,11 +21,9 @@ import { QuickEvaluate } from "@/components/quick-evaluate";
 export function TodayDashboard({
   applications,
   inbox,
-  inBetween,
 }: {
   applications: Application[];
   inbox: InboxJob[];
-  inBetween: boolean;
 }) {
   const [followups, setFollowups] = useState<FollowUp[]>([]);
   const [overdue, setOverdue] = useState(0);
@@ -110,7 +108,7 @@ export function TodayDashboard({
               Open pipeline
             </Link>
           </div>
-          {inBetween && <QuickEvaluate />}
+          <QuickEvaluate />
         </div>
       </section>
 

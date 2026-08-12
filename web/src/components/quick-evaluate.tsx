@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { useJobs } from "@/components/jobs/job-store";
 import { CostBadge } from "@/components/cost/cost-badge";
+import { normalizeJobUrl, companyFromJobUrl } from "@/lib/job-url.mjs";
 
 // Auto-pipeline, one click: paste a job URL → fire a real evaluation worker
 // (the same kind:"evaluate" that runs modes/oferta.md + writes the A–F report +
@@ -14,14 +15,22 @@ export function QuickEvaluate() {
   const [hint, setHint] = useState("");
 
   function run() {
-    const u = url.trim();
-    if (!/^https?:\/\//i.test(u)) {
-      setHint("Paste a full job-posting URL (https://…).");
+    // Same normalizer the pipeline dialog and /api/run use, so a LinkedIn link
+    // pasted here reaches the guest endpoint rather than the authwall.
+    const normalized = normalizeJobUrl(url);
+    if (!normalized.ok) {
+      setHint(normalized.error);
       return;
     }
-    startJob({ title: "Evaluate · pasted URL", subtitle: u, kind: "evaluate", input: u, page: "/" });
+    startJob({
+      title: `Evaluate · ${companyFromJobUrl(normalized.url) || "pasted link"}`,
+      subtitle: normalized.url,
+      kind: "evaluate",
+      input: normalized.url,
+      page: "/",
+    });
     setUrl("");
-    setHint("Evaluating — watch it in the Workers tray.");
+    setHint("Evaluating. Watch it in the Workers tray.");
   }
 
   return (
