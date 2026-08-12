@@ -89,7 +89,26 @@ A URL that fails normalization returns 400 with the reason rather than spawning 
 that burns tokens on unusable input. The server is authoritative; the dialog runs the
 same module client-side only for instant feedback.
 
-### 4. `web/src/components/pipeline/add-job-dialog.tsx` (new)
+### 4. UI
+
+#### Prior art found during planning
+
+`web/src/components/quick-evaluate.tsx` already performs the core action: paste a URL,
+`startJob({ kind: "evaluate" })`. It is not reachable in practice. It renders only on
+the home page and only when `doctorState().phase === "in-between"`, meaning setup is
+incomplete (`today-dashboard.tsx:113`). An established install never sees it. Its
+validation is a bare `^https?://` test, with no LinkedIn handling.
+
+So the UI work is: extract the shared behaviour, give it a real home on the Pipeline
+page, and fix the gating that hides it. No parallel implementation.
+
+#### `web/src/components/jobs/add-job-urls.ts` (new)
+
+A hook holding the logic both surfaces need: parse pasted text into one or more URLs,
+normalize each through `normalizeJobUrl`, report per-line errors, flag duplicates, and
+expose `evaluateAll()` / `addAllToInbox()`. Neither surface owns this logic.
+
+#### `web/src/components/pipeline/add-job-dialog.tsx` (new)
 
 Trigger: an "Add job URL" button in the Pipeline header beside the search box, on
 every tab. Also a secondary link inside the empty-inbox card, so a cold-start user has
@@ -109,6 +128,13 @@ Dialog:
   refreshes the tracker snapshot.
 - Secondary action **Add to inbox** (free, no tokens): posts to `/api/explore/add`.
   Company is best-effort from the ATS slug in the URL, falling back to the host.
+
+#### `web/src/components/quick-evaluate.tsx` (modified)
+
+Refactored onto the same hook, so its single-URL pill gains LinkedIn normalization and
+the shared validation. Separately, its render condition on the home page changes from
+`inBetween` to always: an established user is precisely the person with a pipeline to
+paste into, and the current gate makes the component dead code for them.
 
 ## Data flow
 
