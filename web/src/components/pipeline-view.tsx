@@ -289,7 +289,7 @@ function InboxEmpty({ count, filtered, onAdd }: { count: number; filtered: boole
           <p className="mx-auto mt-2 max-w-sm text-sm text-muted">Nothing pending right now.</p>
         ) : (
           <>
-            <p className="mx-auto mt-2 max-w-sm text-sm text-muted">Find roles that match your CV — free, no tokens spent.</p>
+            <p className="mx-auto mt-2 max-w-sm text-sm text-muted">Find roles that match your CV. Free, no tokens spent.</p>
             <Link
               href="/explore?run=1"
               className="mt-5 inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-brand-foreground shadow-sm transition-all duration-200 hover:bg-brand-200 hover:-translate-y-0.5 hover:shadow-md"
