@@ -15,6 +15,11 @@
   --color-brand-soft: hsl(26 73% 51% / 0.12);
   --color-brand-secondary: #fc7744;
 
+  /* Tailwind's default container scale stops at 7xl (80rem). The report/detail
+     pages want one step wider, so continue the scale's own 8rem stride rather
+     than reaching for an arbitrary max-w-[…] value at the call site. */
+  --container-8xl: 88rem;
+
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
   --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
