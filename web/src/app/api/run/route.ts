@@ -182,16 +182,21 @@ export async function POST(req: Request) {
       };
       let lastTokens = 0; // per-run token cost from the Claude result event (#6) — local only
       let lastCostUsd: number | null = null;
-      // pdf-mode's agent only tailors content now (rendering moved to the
-      // backend, #2172) — but its killMs still has to leave real headroom
-      // inside the route's overall maxDuration (800s): the render+mark phase
-      // (renderPdf, below) starts only after this timer's window and has no
-      // timeout of its own, so an agent that runs close to its full budget
-      // would otherwise leave the platform's hard maxDuration cutoff to kill
-      // generate-pdf.mjs mid-render. 600s agent / ~200s render is ample —
-      // a Chromium PDF render normally takes low tens of seconds even with a
-      // cold Playwright launch.
-      const killMs = kind === "pdf" ? 600_000 : 285_000;
+      // Both non-fix-portal kinds get 600s, but for different reasons. pdf-mode's
+      // agent only tailors content now (rendering moved to the backend, #2172) —
+      // its killMs still has to leave real headroom inside the route's overall
+      // maxDuration (800s): the render+mark phase (renderPdf, below) starts only
+      // after this timer's window and has no timeout of its own, so an agent that
+      // runs close to its full budget would otherwise leave the platform's hard
+      // maxDuration cutoff to kill generate-pdf.mjs mid-render. 600s agent / ~200s
+      // render is ample — a Chromium PDF render normally takes low tens of seconds
+      // even with a cold Playwright launch. evaluate has no post-agent phase at
+      // all — merge-tracker.mjs runs inside the agent's own turn — so it can spend
+      // the same 600s budget entirely on the agent: a real evaluation doing web
+      // research routinely runs past 4m45s, and a shorter timer was killing it
+      // before it could finish (and misreporting the result — see the close
+      // handler below).
+      const killMs = kind === "pdf" || kind === "evaluate" ? 600_000 : 285_000;
       killer = setTimeout(() => {
         try { child.kill("SIGTERM"); } catch { /* ignore */ }
       }, killMs);
@@ -391,9 +396,22 @@ export async function POST(req: Request) {
           // The worker ran but never wrote the report/tracker row (e.g. a CLI
           // without file-write authorization) — surface it instead of a fake score.
           send({ type: "error", msg: "This evaluation didn't save a report, so it's not in your tracker. Full evaluation is verified on Claude Code." });
+        } else if (persists && wroteReport && !cleanExit) {
+          // The kill timer (killMs, above) or some other non-zero/signal exit cut the
+          // run off, but the report file had already been written before that
+          // happened — wroteReport only flips true once reports/ actually gained a
+          // new file. Telling the user nothing was saved here would be false: this
+          // stays an error (a half-finished evaluation must never be banked as a
+          // confident score), but the wording has to say what actually happened. The
+          // client's refresh only fires on a clean "done" event, so this run's report
+          // will not show up in the tracker until the page is reloaded.
+          send({
+            type: "error",
+            msg: "This run was cut off before it finished, but it had already saved a report. Reload to see it, and re-run if the report looks incomplete.",
+          });
         } else if (!cleanExit || sawError) {
-          // Produced output (maybe even a report) but did NOT finish cleanly — flag it
-          // instead of recording a confident score off a half-finished run.
+          // Produced output but did NOT finish cleanly and never wrote a report — flag
+          // it instead of recording a confident score off a half-finished run.
           send({ type: "error", msg: "This run hit an error before finishing, so it isn't recorded as a confident result — re-run it to verify." });
         } else {
           send({ type: "done", tokens: lastTokens, costUsd: lastCostUsd });
