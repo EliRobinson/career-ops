@@ -158,3 +158,35 @@ test("isShellSafeCompanyName: refuses anything that could close the quote", () =
   assert.equal(isShellSafeCompanyName("x".repeat(81)), false);
   assert.equal(isShellSafeCompanyName(undefined), false);
 });
+
+test("buildPrompt: without fetchUrl the evaluate prompt is byte-identical", () => {
+  // Given the #2185 freeze asserts on this exact string, an added parameter must
+  // change nothing for every existing caller.
+  const base = buildPrompt({ kind: "evaluate", ...ARGS });
+
+  assert.equal(buildPrompt({ kind: "evaluate", ...ARGS, fetchUrl: undefined }), base);
+  // ...including the ordinary case where the posting is read from its own URL
+  assert.equal(buildPrompt({ kind: "evaluate", ...ARGS, fetchUrl: ARGS.input }), base);
+});
+
+test("buildPrompt: a differing fetchUrl names both URLs and pins which one is recorded", () => {
+  // Given a LinkedIn evaluation, where the agent must read the guest mirror but
+  // record the clickable link
+  const prompt = buildPrompt({
+    kind: "evaluate",
+    input: "https://www.linkedin.com/jobs/view/4434693435/",
+    fetchUrl: "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4434693435",
+    memory: "",
+    today: "2026-08-11",
+  });
+
+  // Then both appear...
+  assert.ok(prompt.includes("https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4434693435"));
+  assert.ok(prompt.includes("https://www.linkedin.com/jobs/view/4434693435/"));
+  // ...and the report/tracker URL is pinned to the canonical one, which is the whole
+  // point: a tracker full of guest-API links would be useless to click.
+  assert.match(prompt, /record[^\n]*https:\/\/www\.linkedin\.com\/jobs\/view\/4434693435\//i);
+  // And the freeze invariants still hold for this variant
+  assert.equal((prompt.match(/VERDICT:/g) ?? []).length, 1);
+  assert.match(prompt, /NEVER submit an application/);
+});
