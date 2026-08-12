@@ -5,6 +5,7 @@ import { resolveCli } from "@/lib/clis";
 import { careerOpsRoot, readMemory, findReportFile } from "@/lib/career-ops";
 import { resolvePdfPaths, type PdfPaths } from "@/lib/pdf-paths.mjs";
 import { renderAndMarkPdf, writeCvHtml, pdfRunOutcome } from "@/lib/pdf-render.mjs";
+import { evaluateRunOutcome } from "@/lib/run-outcome.mjs";
 import { createCvEnvelopeFilter, type CvEnvelope } from "@/lib/cv-envelope.mjs";
 import { buildPrompt, isShellSafeCompanyName } from "@/lib/run-prompts.mjs";
 import { normalizeJobUrl } from "@/lib/job-url.mjs";
@@ -444,34 +445,20 @@ export async function POST(req: Request) {
           return close();
         }
 
-        const wroteReport = countReports() > reportsBefore;
         // Honesty gate (#9): a green "done" with a parsed score requires a CLEAN exit,
         // real output, AND (for evaluations) a report actually written. Anything else
-        // is surfaced — an errored run must never be banked as a confident score.
-        const baseErr = noOutputError();
-        if (baseErr) {
-          send({ type: "error", msg: baseErr });
-        } else if (persists && !wroteReport) {
-          // The worker ran but never wrote the report/tracker row (e.g. a CLI
-          // without file-write authorization) — surface it instead of a fake score.
-          send({ type: "error", msg: "This evaluation didn't save a report, so it's not in your tracker. Full evaluation is verified on Claude Code." });
-        } else if (persists && wroteReport && !cleanExit) {
-          // The kill timer (killMs, above) or some other non-zero/signal exit cut the
-          // run off, but the report file had already been written before that
-          // happened — wroteReport only flips true once reports/ actually gained a
-          // new file. Telling the user nothing was saved here would be false: this
-          // stays an error (a half-finished evaluation must never be banked as a
-          // confident score), but the wording has to say what actually happened. The
-          // client's refresh only fires on a clean "done" event, so this run's report
-          // will not show up in the tracker until the page is reloaded.
-          send({
-            type: "error",
-            msg: "This run was cut off before it finished, but it had already saved a report. Reload to see it, and re-run if the report looks incomplete.",
-          });
-        } else if (!cleanExit || sawError) {
-          // Produced output but did NOT finish cleanly and never wrote a report — flag
-          // it instead of recording a confident score off a half-finished run.
-          send({ type: "error", msg: "This run hit an error before finishing, so it isn't recorded as a confident result — re-run it to verify." });
+        // is surfaced — an errored run must never be banked as a confident score. The
+        // five arms and the reason for each live in run-outcome.mjs, unit-tested
+        // beside pdfRunOutcome's suite rather than buried in this transport closure.
+        const outcome = evaluateRunOutcome({
+          noOutputMessage: noOutputError(),
+          persists,
+          wroteReport: countReports() > reportsBefore,
+          cleanExit,
+          sawError,
+        });
+        if (!outcome.ok) {
+          send({ type: "error", msg: outcome.message });
         } else {
           send({ type: "done", tokens: lastTokens, costUsd: lastCostUsd });
         }
