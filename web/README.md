@@ -19,7 +19,7 @@ npm ci
 npm run dev
 ```
 
-Open http://localhost:3000. The app reads the career-ops checkout it lives in
+Open http://localhost:6500. The app reads the career-ops checkout it lives in
 (the parent directory) — your existing CV, pipeline and reports appear as-is.
 
 ## What works today
