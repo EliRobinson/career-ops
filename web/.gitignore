@@ -14,3 +14,10 @@ next-env.d.ts
 
 # agent session memory — internal notes, never in the public repo
 .claude/
+
+# next dev (Next 16) regenerates these on every run — see
+# node_modules/next/dist/server/lib/generate-agent-files.js. Machine-local
+# scaffolding, not project content; keep the tree clean instead of committing
+# a file nobody hand-edits.
+/AGENTS.md
+/CLAUDE.md
