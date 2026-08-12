@@ -7,6 +7,7 @@ import { resolvePdfPaths, type PdfPaths } from "@/lib/pdf-paths.mjs";
 import { renderAndMarkPdf, writeCvHtml, pdfRunOutcome } from "@/lib/pdf-render.mjs";
 import { createCvEnvelopeFilter, type CvEnvelope } from "@/lib/cv-envelope.mjs";
 import { buildPrompt, isShellSafeCompanyName } from "@/lib/run-prompts.mjs";
+import { normalizeJobUrl } from "@/lib/job-url.mjs";
 import { claudeCliArgs } from "@/lib/claude-invocation.mjs";
 import { acquireTrackerWrite, releaseTrackerWrite } from "@/lib/core/run-registry";
 
@@ -86,7 +87,25 @@ export async function POST(req: Request) {
     pdfPaths = pathsResult.paths;
   }
 
-  const prompt = buildPrompt({ kind, input, memory: readMemory(), today });
+  // "evaluate" is the only kind whose input is a posting URL — pdf takes a report
+  // number and fix-portal a company name, so neither is normalized. LinkedIn's
+  // /jobs/view page is an authwall for a headless agent, so the agent reads a
+  // public mirror while the report and tracker record the canonical link.
+  let evalUrl = input;
+  let fetchUrl: string | undefined;
+  if (kind === "evaluate") {
+    const normalized = normalizeJobUrl(input);
+    if (!normalized.ok) {
+      return new Response(JSON.stringify({ error: normalized.error }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    evalUrl = normalized.url;
+    fetchUrl = normalized.fetchUrl;
+  }
+
+  const prompt = buildPrompt({ kind, input: evalUrl, memory: readMemory(), today, fetchUrl });
 
   const isClaude = cliId === "claude";
   // Which tools each kind gets, and the whole claude argv, live in
