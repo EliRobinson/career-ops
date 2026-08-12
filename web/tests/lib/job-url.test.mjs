@@ -91,6 +91,35 @@ test("normalizeJobUrl: a bare host gets https, junk is refused", () => {
   assert.equal(normalizeJobUrl(undefined).ok, false);
 });
 
+test("normalizeJobUrl: trailing sentence punctuation from a pasted paragraph is stripped", () => {
+  // Given a link copied out of the end of a sentence, period included
+  const period = normalizeJobUrl("https://boards.greenhouse.io/acme/jobs/1.");
+  assert.equal(period.ok, true);
+  assert.equal(period.url, "https://boards.greenhouse.io/acme/jobs/1");
+
+  // Given the same, but the sentence continues after the link with a comma
+  const comma = normalizeJobUrl("https://boards.greenhouse.io/acme/jobs/1,");
+  assert.equal(comma.ok, true);
+  assert.equal(comma.url, "https://boards.greenhouse.io/acme/jobs/1");
+});
+
+test("normalizeJobUrl: a URL wrapped in angle brackets is unwrapped", () => {
+  // Given the Markdown/email convention of wrapping a bare link in <...>
+  const r = normalizeJobUrl("<https://boards.greenhouse.io/acme/jobs/1>");
+
+  assert.equal(r.ok, true);
+  assert.equal(r.url, "https://boards.greenhouse.io/acme/jobs/1");
+});
+
+test("normalizeJobUrl: a URL ending in a real trailing slash is left alone", () => {
+  // Given a posting whose path itself legitimately ends in "/" — must NOT be
+  // treated as paste noise the way a trailing "." or "," is
+  const r = normalizeJobUrl("https://boards.greenhouse.io/acme/jobs/1/");
+
+  assert.equal(r.ok, true);
+  assert.equal(r.url, "https://boards.greenhouse.io/acme/jobs/1/");
+});
+
 test("parsePastedUrls: splits on whitespace and reports bad lines individually", () => {
   // Given a multi-line paste where one line is broken
   const text = `https://boards.greenhouse.io/acme/jobs/1

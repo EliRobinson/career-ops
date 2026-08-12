@@ -39,6 +39,33 @@ function domainIs(host, base) {
 }
 
 /**
+ * Strip artifacts a job URL picks up when copied out of a sentence (email, Slack
+ * message, chat) rather than off an address bar: a single layer of wrapping
+ * <angle brackets> or (parentheses) around the whole string, then trailing
+ * sentence punctuation. A trailing "/" is left alone, since it is meaningful in a
+ * URL path rather than incidental to the prose around it. Runs on the already-
+ * trimmed input, before the scheme check, so both a bare host and a full URL
+ * benefit.
+ *
+ * @param {string} s
+ * @returns {string}
+ */
+function stripPasteNoise(s) {
+  const WRAPPERS = [
+    ["<", ">"],
+    ["(", ")"],
+  ];
+  for (const [open, close] of WRAPPERS) {
+    if (s.startsWith(open) && s.endsWith(close) && s.length > open.length + close.length) {
+      s = s.slice(1, -1).trim();
+    }
+  }
+  // Only sentence-ending punctuation a URL never legitimately ends with. Not "/",
+  // "]", ")", "%", or "=", any of which can be a real trailing path/query byte.
+  return s.replace(/[.,;!?]+$/, "");
+}
+
+/**
  * The numeric LinkedIn job id, or null when this URL is not one posting.
  * Matched as digits only, so nothing user-supplied is ever spliced into a hostname.
  * @param {URL} u
@@ -65,7 +92,7 @@ function linkedInJobId(u) {
  */
 export function normalizeJobUrl(raw) {
   if (typeof raw !== "string" || !raw.trim()) return { ok: false, error: "Paste a job posting URL." };
-  const trimmed = raw.trim();
+  const trimmed = stripPasteNoise(raw.trim());
   // A paste with no scheme is the common case; anything that already declares one
   // keeps it, so javascript: and file: reach the protocol check below and are refused.
   const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
