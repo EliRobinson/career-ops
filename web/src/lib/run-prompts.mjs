@@ -48,11 +48,11 @@ const SAFE_COMPANY_NAME = /^[\p{L}\p{N} .,&'()+/-]+$/u;
  * leave at the tail of the prompt, after the text that says nothing should follow
  * the final VERDICT line.
  *
- * Returns "" when there is nothing to say, which keeps the emitted prompt
- * BYTE-IDENTICAL for every ordinary posting. test-all.mjs's #2185 freeze asserts on
- * that exact string, so a change here must still collapse to "" in the no-mirror
- * case; it no longer needs to stay a pure suffix, since its interpolation point
- * moved off the tail.
+ * Returns "" when there is nothing to say, so an ordinary posting's prompt is
+ * unchanged by this parameter's existence. That is the same shape `mem` uses below.
+ * run-prompts.test.mjs pins it by comparing the no-fetchUrl and fetchUrl===input
+ * results against the plain call; nothing freezes the prompt's literal text, so
+ * rewording the prompt itself stays a normal edit.
  *
  * @param {string} input     Canonical posting URL.
  * @param {string|undefined} fetchUrl

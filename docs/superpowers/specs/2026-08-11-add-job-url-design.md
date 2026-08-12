@@ -72,8 +72,15 @@ convention (`cv-envelope.mjs`, `pdf-paths.mjs`, `run-prompts.mjs`).
 
 `buildPrompt` accepts an optional `fetchUrl`.
 
-- Absent, or equal to `input`: the emitted prompt is byte-identical to today's. The
-  existing `#2185` freeze assertions in `test-all.mjs` keep passing unchanged.
+- Absent, or equal to `input`: the emitted prompt is unchanged by the parameter's
+  existence, the same way the existing `mem` clause collapses to `""`.
+
+  An earlier draft of this spec claimed `test-all.mjs` freezes the exact string
+  `buildPrompt` returns. It does not. The `#2185` freeze asserts on `claudeCliArgs`
+  argv and tool scopes; `test-all.mjs:13213` says in as many words that the prompt is
+  left to `run-prompts.test.mjs`. No pre-existing test pins the prompt's literal text.
+  The collapse-to-`""` shape is still right, but it is a design choice, not a
+  constraint imposed from outside.
 - Different from `input`: the evaluate prompt gains one instruction telling the agent
   to read `fetchUrl` (described as the public mirror of the same posting) while
   recording `url` as the canonical `**URL:**` in the report header and in the tracker
