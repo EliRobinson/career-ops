@@ -142,7 +142,7 @@ export function AssistantConsole() {
   const pathname = usePathname();
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { jobs, startJob } = useJobs();
+  const { jobs, startJob, startEvaluate } = useJobs();
   const pipeline = usePipeline();
   const apply = useApply();
 
@@ -242,6 +242,7 @@ export function AssistantConsole() {
       push: (p) => router.push(p),
       replace: (p) => router.replace(p),
       startJob,
+      startEvaluate,
       inbox: pipelineRef.current.inbox,
       applications: pipelineRef.current.applications,
       jobForUrl: (url) => {

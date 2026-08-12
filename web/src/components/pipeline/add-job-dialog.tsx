@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link2, Loader2, X } from "lucide-react";
 import { useJobs } from "@/components/jobs/job-store";
 import { CostBadge } from "@/components/cost/cost-badge";
-import { parsePastedUrls, companyFromJobUrl } from "@/lib/job-url.mjs";
+import { parsePastedUrls, companyFromJobUrl, postingKey } from "@/lib/job-url.mjs";
 
 // "Add job URL" — the manual counterpart to discovery. Paste a link you were sent
 // and it runs the SAME kind:"evaluate" worker the inbox shortlist uses, which is the
@@ -14,7 +14,7 @@ import { parsePastedUrls, companyFromJobUrl } from "@/lib/job-url.mjs";
 // its /jobs/view page is an authwall for a headless agent, so job-url.mjs points the
 // fetch at the public guest endpoint while the tracker keeps the clickable link.
 export function AddJobDialog({ inboxUrls, onClose }: { inboxUrls: string[]; onClose: () => void }) {
-  const { jobs, startJob } = useJobs();
+  const { jobs, startEvaluate } = useJobs();
   const [text, setText] = useState("");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,25 +31,21 @@ export function AddJobDialog({ inboxUrls, onClose }: { inboxUrls: string[]; onCl
 
   // Already-seen check, free: the inbox URLs are already on this page and past
   // evaluate runs are already in localStorage. Warn, never block — re-scoring a
-  // posting after it was edited is legitimate.
+  // posting after it was edited is legitimate. Compared on postingKey, not the
+  // raw string, so a pipeline row that still carries tracking noise (e.g. a
+  // LinkedIn "?trk=..." link) still matches the canonical URL a fresh paste
+  // normalizes to.
   const seen = useMemo(() => {
-    const s = new Set(inboxUrls);
-    for (const j of jobs) if (j.kind === "evaluate" && j.input) s.add(j.input);
+    const s = new Set(inboxUrls.map(postingKey));
+    for (const j of jobs) if (j.kind === "evaluate" && j.input) s.add(postingKey(j.input));
     return s;
   }, [inboxUrls, jobs]);
-  const dupes = entries.filter((e) => seen.has(e.url));
+  const dupes = entries.filter((e) => seen.has(postingKey(e.url)));
 
   const evaluateAll = () => {
     const batchId = entries.length > 1 ? `paste-${Date.now()}` : undefined;
     for (const e of entries) {
-      startJob({
-        title: `Evaluate · ${companyFromJobUrl(e.url) || "pasted link"}`,
-        subtitle: e.url,
-        kind: "evaluate",
-        input: e.url,
-        page: "/pipeline",
-        batchId,
-      });
+      startEvaluate({ url: e.url, subtitle: e.url, page: "/pipeline", batchId });
     }
     onClose();
   };
