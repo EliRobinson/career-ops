@@ -29,13 +29,56 @@
  * @property {string} error  User-facing, no em dashes (AGENTS.md house rule).
  */
 
+/** @typedef {"greenhouse"|"lever"|"ashby"|"workday"} AtsSource */
+
 // Share-sheet and campaign noise. Dropped so the same posting pasted from an email
 // and from the address bar dedupes to one entry, and so the recorded URL stays clean.
 const TRACKING_PARAMS = [/^utm_/i, /^trk$/i, /^trkInfo$/i, /^refId$/i, /^trackingId$/i, /^originalSubdomain$/i, /^lipi$/i, /^eBP$/i];
 
-/** Host equality anchored at a dot boundary, so "linkedin.com.evil.example" never matches. */
-function domainIs(host, base) {
+/**
+ * Host equality anchored at a dot boundary, so "greenhouse.io.evil.example" never
+ * matches "greenhouse.io". The one host-matching rule shared by every caller that
+ * needs to know what ATS (or what registrable domain) a URL belongs to.
+ *
+ * @param {string} host
+ * @param {string} base
+ * @returns {boolean}
+ */
+export function domainIs(host, base) {
   return host === base || host.endsWith(`.${base}`);
+}
+
+/**
+ * Host -> ATS source, for every ATS host any caller in this app recognizes.
+ * Single list (#F6): `sourceFromUrl` in inbox.ts and `companyFromJobUrl` below both
+ * used to keep their own copy of this list, which meant they could silently drift
+ * on which hosts count as an ATS. Workday ships two live hostnames: the tenant
+ * subdomain (`{tenant}.myworkdayjobs.com`) and the bare `workday.com` some postings
+ * use directly; both resolve to the same source.
+ *
+ * @type {ReadonlyArray<[string, AtsSource]>}
+ */
+export const ATS_HOSTS = [
+  ["greenhouse.io", "greenhouse"],
+  ["lever.co", "lever"],
+  ["ashbyhq.com", "ashby"],
+  ["myworkdayjobs.com", "workday"],
+  ["workday.com", "workday"],
+];
+
+/**
+ * Which ATS a host belongs to, matched with the same dot-boundary rule as
+ * `domainIs`. Returns null for a host that isn't one of ATS_HOSTS (including
+ * linkedin.com, which is handled separately since it isn't an ATS).
+ *
+ * @param {string} host
+ * @returns {AtsSource|null}
+ */
+export function atsSourceFromHost(host) {
+  for (const [base, source] of ATS_HOSTS) {
+    if (domainIs(host, base)) return source;
+  }
+  return null;
 }
 
 /**
@@ -47,6 +90,12 @@ function domainIs(host, base) {
  * trimmed input, before the scheme check, so both a bare host and a full URL
  * benefit.
  *
+ * The two strips don't commute on their own: "<url>." needs the trailing "." gone
+ * before the ">" is the last character, so the wrapper check can see it. Composed
+ * pastes ("<url>.", "(url),") are the common case, since a Markdown or email link
+ * is usually both wrapped AND sitting at the end of a sentence. So this runs both
+ * strips to a fixed point rather than once each.
+ *
  * @param {string} s
  * @returns {string}
  */
@@ -55,22 +104,34 @@ function stripPasteNoise(s) {
     ["<", ">"],
     ["(", ")"],
   ];
-  for (const [open, close] of WRAPPERS) {
-    if (s.startsWith(open) && s.endsWith(close) && s.length > open.length + close.length) {
-      s = s.slice(1, -1).trim();
+  // Guard against an unbounded loop: a pass that changes anything removes at
+  // least one character (a wrapper strips two, a punctuation run strips one or
+  // more), so the string's own length is a hard ceiling on how many passes a
+  // fixed point can take. The caller already bounds `s` at MAX_URL_LENGTH before
+  // this runs, so this is a small, fixed amount of work either way, not a
+  // reintroduction of the quadratic behavior the backwards scan below replaced.
+  const maxPasses = s.length + 1;
+  for (let pass = 0; pass < maxPasses; pass++) {
+    const before = s;
+    for (const [open, close] of WRAPPERS) {
+      if (s.startsWith(open) && s.endsWith(close) && s.length > open.length + close.length) {
+        s = s.slice(1, -1).trim();
+      }
     }
+    // Only sentence-ending punctuation a URL never legitimately ends with. Not "/",
+    // "]", ")", "%", or "=", any of which can be a real trailing path/query byte.
+    //
+    // Scanned backwards rather than matched with /[.,;!?]+$/. That regex is
+    // polynomial on this input: for a paste like "!!!!!!…x" the engine consumes the
+    // whole run, fails on $, restarts one character right and does it again, which is
+    // O(n^2) on a string the user controls the length of (CodeQL js/polynomial-redos).
+    // A backwards walk is linear and states the intent more plainly anyway.
+    let end = s.length;
+    while (end > 0 && TRAILING_PUNCTUATION.includes(s[end - 1])) end--;
+    s = s.slice(0, end);
+    if (s === before) break;
   }
-  // Only sentence-ending punctuation a URL never legitimately ends with. Not "/",
-  // "]", ")", "%", or "=", any of which can be a real trailing path/query byte.
-  //
-  // Scanned backwards rather than matched with /[.,;!?]+$/. That regex is
-  // polynomial on this input: for a paste like "!!!!!!…x" the engine consumes the
-  // whole run, fails on $, restarts one character right and does it again, which is
-  // O(n^2) on a string the user controls the length of (CodeQL js/polynomial-redos).
-  // A backwards walk is linear and states the intent more plainly anyway.
-  let end = s.length;
-  while (end > 0 && TRAILING_PUNCTUATION.includes(s[end - 1])) end--;
-  return s.slice(0, end);
+  return s;
 }
 
 const TRAILING_PUNCTUATION = ".,;!?";
@@ -193,8 +254,11 @@ export function companyFromJobUrl(url) {
   }
   const host = u.hostname.toLowerCase();
   const seg = u.pathname.split("/").filter(Boolean);
-  // The three ATS layouts that put the company first in the path.
-  if (domainIs(host, "greenhouse.io") || domainIs(host, "lever.co") || domainIs(host, "ashbyhq.com")) {
+  const source = atsSourceFromHost(host);
+  // Of ATS_HOSTS, only these three ATS layouts put the company first in the path.
+  // Workday's tenant subdomain carries the company instead (acme.myworkdayjobs.com),
+  // so it falls through to the registrable-name branch below like any other host.
+  if (source === "greenhouse" || source === "lever" || source === "ashby") {
     return seg[0] ?? "";
   }
   // LinkedIn's URL carries the job id and nothing about the employer.
@@ -202,4 +266,19 @@ export function companyFromJobUrl(url) {
   // Otherwise the registrable name: careers.example.com -> example.
   const parts = host.replace(/^www\./, "").split(".");
   return parts.length >= 2 ? parts[parts.length - 2] : parts[0] ?? "";
+}
+
+/**
+ * Canonical identity key for a pasted URL: the thing several UI surfaces (inbox,
+ * tracker, dedup) can compare to decide whether two pasted strings point at the
+ * same posting. Must never throw and never return undefined so a caller can
+ * always use the result as a Map/Set key or React list key with no null check.
+ *
+ * @param {string} url
+ * @returns {string} normalizeJobUrl's canonical `url` on success, or the input
+ *   unchanged when it does not parse as a job posting URL.
+ */
+export function postingKey(url) {
+  const r = normalizeJobUrl(url);
+  return r.ok ? r.url : String(url ?? "");
 }

@@ -10,7 +10,14 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeJobUrl, parsePastedUrls, companyFromJobUrl } from "../../src/lib/job-url.mjs";
+import {
+  normalizeJobUrl,
+  parsePastedUrls,
+  companyFromJobUrl,
+  postingKey,
+  domainIs,
+  atsSourceFromHost,
+} from "../../src/lib/job-url.mjs";
 
 test("normalizeJobUrl: a plain ATS posting passes through unchanged", () => {
   // Given a Greenhouse posting, which a headless agent can already read
@@ -138,6 +145,20 @@ test("normalizeJobUrl: a URL wrapped in angle brackets is unwrapped", () => {
   assert.equal(r.url, "https://boards.greenhouse.io/acme/jobs/1");
 });
 
+test("normalizeJobUrl: composed paste noise (wrapper AND trailing punctuation) is stripped", () => {
+  // Given the most common Markdown/email paste shape: a link wrapped in <...> at
+  // the end of a sentence. Neither strip alone resolves this: the "." has to go
+  // before ">" is the last character for the wrapper check to see it.
+  const angle = normalizeJobUrl("<https://boards.greenhouse.io/acme/jobs/1>.");
+  assert.equal(angle.ok, true);
+  assert.equal(angle.url, "https://boards.greenhouse.io/acme/jobs/1");
+
+  // Given the parenthesized equivalent, with a comma continuing the sentence after
+  const paren = normalizeJobUrl("(https://boards.greenhouse.io/acme/jobs/1),");
+  assert.equal(paren.ok, true);
+  assert.equal(paren.url, "https://boards.greenhouse.io/acme/jobs/1");
+});
+
 test("normalizeJobUrl: a URL ending in a real trailing slash is left alone", () => {
   // Given a posting whose path itself legitimately ends in "/" — must NOT be
   // treated as paste noise the way a trailing "." or "," is
@@ -181,4 +202,47 @@ test("companyFromJobUrl: derives the company from an ATS slug, else the host", (
   assert.equal(companyFromJobUrl("https://careers.example.com/jobs/1"), "example");
   // Given LinkedIn, the company is simply not in the URL — say nothing rather than guess
   assert.equal(companyFromJobUrl("https://www.linkedin.com/jobs/view/4434693435/"), "");
+});
+
+test("domainIs: anchored at a dot boundary, not a bare substring", () => {
+  // Given the real host and a lookalike that merely contains it
+  assert.equal(domainIs("boards.greenhouse.io", "greenhouse.io"), true);
+  assert.equal(domainIs("greenhouse.io", "greenhouse.io"), true);
+  assert.equal(domainIs("greenhouse.io.evil.example", "greenhouse.io"), false);
+  assert.equal(domainIs("notgreenhouse.io", "greenhouse.io"), false);
+});
+
+test("atsSourceFromHost: recognizes every ATS host sourceFromUrl (inbox.ts) relies on", () => {
+  // Given each ATS's real host, including Workday's two live spellings
+  assert.equal(atsSourceFromHost("boards.greenhouse.io"), "greenhouse");
+  assert.equal(atsSourceFromHost("jobs.lever.co"), "lever");
+  assert.equal(atsSourceFromHost("jobs.ashbyhq.com"), "ashby");
+  assert.equal(atsSourceFromHost("acme.myworkdayjobs.com"), "workday");
+  assert.equal(atsSourceFromHost("acme.workday.com"), "workday");
+  // Given a host on no ATS at all
+  assert.equal(atsSourceFromHost("careers.example.com"), null);
+});
+
+test("postingKey: the canonical url for a normalizable posting, LinkedIn included", () => {
+  // Given a plain ATS link, the key is just its normalized url
+  assert.equal(postingKey("https://boards.greenhouse.io/acme/jobs/4567890"), "https://boards.greenhouse.io/acme/jobs/4567890");
+
+  // Given two different LinkedIn spellings of the same job, both collapse to the
+  // same key, which is the whole point: this is the identity a caller dedupes on
+  assert.equal(
+    postingKey("https://www.linkedin.com/jobs/view/senior-ai-engineer-at-acme-4434693435"),
+    "https://www.linkedin.com/jobs/view/4434693435/",
+  );
+  assert.equal(
+    postingKey("https://www.linkedin.com/jobs/view/4434693435/"),
+    postingKey("https://www.linkedin.com/jobs/view/senior-ai-engineer-at-acme-4434693435"),
+  );
+});
+
+test("postingKey: hands back the input unchanged when it does not parse, never throws", () => {
+  // Given strings normalizeJobUrl refuses, postingKey must not throw and must not
+  // return undefined, since callers use this as a Map/Set key with no null check
+  assert.equal(postingKey("not a url"), "not a url");
+  assert.equal(postingKey(""), "");
+  assert.doesNotThrow(() => postingKey("javascript:alert(1)"));
 });
