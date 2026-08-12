@@ -15,6 +15,118 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 800; // a real oferta evaluation / pdf-mode CV tailoring + render is heavy and multi-step
 
+/**
+ * What a kind's prepare() hands back to the request when it succeeds.
+ *
+ * Every field is optional and only the kind that produces one sets it: evaluate
+ * returns the normalized posting URL (plus the mirror to actually fetch from),
+ * pdf returns its resolved paths, and the rest return neither. The optionality
+ * is real rather than defaulted — this replaced `let evalUrl = input; let
+ * fetchUrl: string | undefined;`, two mutable bindings whose value for three of
+ * the four kinds was a silent fallback nobody read.
+ */
+type PrepareResult =
+  | { ok: true; input?: string; fetchUrl?: string; pdfPaths?: PdfPaths }
+  | { ok: false; error: string };
+
+/** What the prepare steps need from the request, injected so they stay small. */
+type PrepareContext = { root: string; today: string };
+
+/**
+ * Everything /api/run needs to know about a worker kind, in one row per kind.
+ *
+ * This table is the whole of the route's kind-awareness. It grew out of what
+ * used to be nine scattered `kind === "..."` conditionals, three of which spelled
+ * the same `evaluate || pdf` pair for three unrelated reasons — a shape where the
+ * only way to answer "what does pdf actually do differently?" was to read the
+ * whole file. `kind` itself still reaches buildPrompt and claudeCliArgs verbatim;
+ * the tool scope is theirs to decide, never this table's (#2185).
+ */
+type KindSpec = {
+  /** Core file this kind actually runs — absent from a data-only CAREER_OPS_ROOT. */
+  script?: string;
+  /** Needs cv.md: an A-F score or a tailored CV is meaningless without one. */
+  needsCv?: boolean;
+  /** Mutates the tracker, so it holds a write token for the whole run. */
+  holdsTrackerWrite?: boolean;
+  /** Writes a report file, so the route can verify one actually landed. */
+  persistsReport?: boolean;
+  /** Agent emits its CV inline in a `<<cv-html>>` envelope the backend renders (#2185). */
+  emitsCvEnvelope?: boolean;
+  /** Agent-child budget before SIGTERM. Each row states its own reason. */
+  killMs: number;
+  /** Per-kind input validation/normalization; a failure becomes the route's 400. */
+  prepare?: (input: string, ctx: PrepareContext) => PrepareResult;
+};
+
+/**
+ * "evaluate" is the only kind whose input is a posting URL — pdf takes a report
+ * number and fix-portal a company name, so neither is normalized. LinkedIn's
+ * /jobs/view page is an authwall for a headless agent, so the agent reads a
+ * public mirror while the report and tracker record the canonical link.
+ */
+function prepareEvaluate(input: string): PrepareResult {
+  const normalized = normalizeJobUrl(input);
+  if (!normalized.ok) return { ok: false, error: normalized.error };
+  return { ok: true, input: normalized.url, fetchUrl: normalized.fetchUrl };
+}
+
+/**
+ * Precompute deterministic scratch + final paths so the agent never chooses its
+ * own filenames — the backend owns naming, writing (#2185) and rendering (#2172).
+ * Nothing is cleared first: writeCvHtml rewrites the HTML from this run's freshly
+ * parsed envelope before any render, and the agent is no longer told these paths,
+ * so a stale file cannot survive into a render.
+ */
+function preparePdf(input: string, ctx: PrepareContext): PrepareResult {
+  const pathsResult = resolvePdfPaths(input, ctx.today, ctx.root, findReportFile);
+  if (!pathsResult.ok) return { ok: false, error: pathsResult.error };
+  return { ok: true, pdfPaths: pathsResult.paths };
+}
+
+/**
+ * fix-portal's prompt puts the company name straight into a shell command the
+ * agent runs, and a company name can arrive from a public ATS listing rather than
+ * the user's own typing. Refuse rather than sanitize: a silently rewritten name
+ * would repair the wrong portal.
+ */
+function prepareFixPortal(input: string): PrepareResult {
+  if (isShellSafeCompanyName(input)) return { ok: true };
+  return {
+    ok: false,
+    error: "That company name has characters I can't safely pass to the portal checker — rename it in portals.yml first.",
+  };
+}
+
+const KINDS: Record<string, KindSpec> = {
+  // killMs 600s: no post-agent phase at all (merge-tracker.mjs runs inside the
+  // agent's own turn), so the whole budget goes to the agent — a real evaluation
+  // doing web research routinely runs past 4m45s, and a shorter timer was killing
+  // it before it could finish (and misreporting the result, see the close handler).
+  evaluate: { script: "modes/oferta.md", needsCv: true, holdsTrackerWrite: true, persistsReport: true, killMs: 600_000, prepare: prepareEvaluate },
+  // killMs 600s: the agent only tailors content now (rendering moved to the
+  // backend, #2172), and the render+mark phase starts only AFTER this timer's
+  // window with no timeout of its own — 600s here leaves ~200s of the route's
+  // 800s maxDuration for it, ample for a Chromium render even with a cold
+  // Playwright launch. Same number as evaluate, different reason.
+  pdf: { script: "generate-pdf.mjs", needsCv: true, holdsTrackerWrite: true, emitsCvEnvelope: true, killMs: 600_000, prepare: preparePdf },
+  // killMs 285s: an ATS slug probe plus a one-line YAML edit — nothing long-running.
+  "fix-portal": { script: "verify-portals.mjs", killMs: 285_000, prepare: prepareFixPortal },
+  // killMs 285s: read-only reporting, with no persistence phase to protect.
+  research: { killMs: 285_000 },
+};
+
+/**
+ * A kind none of the tables know about.
+ *
+ * buildPrompt deliberately falls through to the evaluate prompt for an unknown
+ * kind and toolScopeFor hands it the read-only scope, so the route tolerates one
+ * rather than rejecting it. This row keeps that tolerance and gives it the
+ * conservative profile it already had: no script requirement, no CV gate, no
+ * prepare step, no write token, no report check, and the short timer.
+ */
+const UNKNOWN_KIND: KindSpec = { killMs: 285_000 };
+
 export async function POST(req: Request) {
   let body: { kind?: string; input?: string; cliId?: string };
   try {
@@ -35,77 +147,38 @@ export async function POST(req: Request) {
   }
   const { spec, binPath } = resolved;
 
+  // hasOwn, not `KINDS[kind] ?? UNKNOWN_KIND`: `kind` is client-supplied, and a
+  // plain object literal answers `KINDS["constructor"]` with a function rather
+  // than undefined — which would slip past `??` and read every flag off it.
+  const k = Object.hasOwn(KINDS, kind) ? KINDS[kind] : UNKNOWN_KIND;
+  /** Every per-kind gate below rejects the same way; only the reason differs. */
+  const reject = (error: string) =>
+    new Response(JSON.stringify({ error }), { status: 400, headers: { "Content-Type": "application/json" } });
+
   // These run the REAL core (modes/scripts), not just data — fail clearly if the
   // root is incomplete instead of faking it.
-  const needsScript: Record<string, string> = { evaluate: "modes/oferta.md", "fix-portal": "verify-portals.mjs", pdf: "generate-pdf.mjs" };
-  const required = needsScript[kind];
-  if (required && !fs.existsSync(path.join(careerOpsRoot(), required))) {
-    return new Response(
-      JSON.stringify({
-        error: `This needs a complete career-ops checkout (${required}). CAREER_OPS_ROOT has data only — point it at a full checkout.`,
-      }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
-  }
-
-  // fix-portal's prompt puts this straight into a shell command the agent runs, and
-  // a company name can arrive from a public ATS listing rather than the user's own
-  // typing. Refuse rather than sanitize: a silently rewritten name would repair the
-  // wrong portal.
-  if (kind === "fix-portal" && !isShellSafeCompanyName(input)) {
-    return new Response(
-      JSON.stringify({ error: "That company name has characters I can't safely pass to the portal checker — rename it in portals.yml first." }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
+  if (k.script && !fs.existsSync(path.join(careerOpsRoot(), k.script))) {
+    return reject(`This needs a complete career-ops checkout (${k.script}). CAREER_OPS_ROOT has data only — point it at a full checkout.`);
   }
 
   // An A–F score is meaningless without a CV to score against — the CLI would
   // hallucinate a fit narrative and still emit a VERDICT. Require cv.md first.
-  if ((kind === "evaluate" || kind === "pdf") && !fs.existsSync(path.join(careerOpsRoot(), "cv.md"))) {
-    return new Response(
-      JSON.stringify({ error: "Add your CV first so I can score this against you — drop it on the home page." }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
+  if (k.needsCv && !fs.existsSync(path.join(careerOpsRoot(), "cv.md"))) {
+    return reject("Add your CV first so I can score this against you — drop it on the home page.");
   }
 
   const today = new Date().toISOString().slice(0, 10);
 
-  // Precompute deterministic scratch + final paths so the agent never chooses
-  // its own filenames — the backend owns naming, writing (#2185) and rendering
-  // (#2172). Nothing is cleared first: writeCvHtml rewrites the HTML
-  // from this run's freshly parsed envelope before any render, and the agent is
-  // no longer told these paths, so a stale file cannot survive into a render.
-  let pdfPaths: PdfPaths | undefined;
-  if (kind === "pdf") {
-    const pathsResult = resolvePdfPaths(input, today, careerOpsRoot(), findReportFile);
-    if (!pathsResult.ok) {
-      return new Response(JSON.stringify({ error: pathsResult.error }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-    pdfPaths = pathsResult.paths;
-  }
+  // The one per-kind input gate: shell-safety for fix-portal, path resolution for
+  // pdf, URL normalization for evaluate, nothing for research. See each prepare
+  // function above for why its kind needs what it needs.
+  const prepared: PrepareResult = k.prepare ? k.prepare(input, { root: careerOpsRoot(), today }) : { ok: true };
+  if (!prepared.ok) return reject(prepared.error);
+  const { pdfPaths, fetchUrl } = prepared;
 
-  // "evaluate" is the only kind whose input is a posting URL — pdf takes a report
-  // number and fix-portal a company name, so neither is normalized. LinkedIn's
-  // /jobs/view page is an authwall for a headless agent, so the agent reads a
-  // public mirror while the report and tracker record the canonical link.
-  let evalUrl = input;
-  let fetchUrl: string | undefined;
-  if (kind === "evaluate") {
-    const normalized = normalizeJobUrl(input);
-    if (!normalized.ok) {
-      return new Response(JSON.stringify({ error: normalized.error }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-    evalUrl = normalized.url;
-    fetchUrl = normalized.fetchUrl;
-  }
-
-  const prompt = buildPrompt({ kind, input: evalUrl, memory: readMemory(), today, fetchUrl });
+  // prepare() only returns an input when it rewrote one (evaluate); every other
+  // kind sends what the client typed, untouched.
+  const prompt = buildPrompt({ kind, input: prepared.input ?? input, memory: readMemory(), today, fetchUrl });
 
   const isClaude = cliId === "claude";
   // Which tools each kind gets, and the whole claude argv, live in
@@ -130,11 +203,11 @@ export async function POST(req: Request) {
       return 0;
     }
   };
-  const persists = kind === "evaluate";
+  const persists = k.persistsReport === true;
   const reportsBefore = persists ? countReports() : 0;
   // Tracker-mutating runs hold a write token so a row delete can't race their merge
   // (tracker.mjs delete doesn't yet share a lock with merge-tracker — see run-registry).
-  const writeToken = kind === "evaluate" || kind === "pdf" ? acquireTrackerWrite() : null;
+  const writeToken = k.holdsTrackerWrite ? acquireTrackerWrite() : null;
 
   const child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env });
   // Decode once on the stream, not per chunk. Buffer#toString() decodes each chunk
@@ -182,24 +255,10 @@ export async function POST(req: Request) {
       };
       let lastTokens = 0; // per-run token cost from the Claude result event (#6) — local only
       let lastCostUsd: number | null = null;
-      // Both non-fix-portal kinds get 600s, but for different reasons. pdf-mode's
-      // agent only tailors content now (rendering moved to the backend, #2172) —
-      // its killMs still has to leave real headroom inside the route's overall
-      // maxDuration (800s): the render+mark phase (renderPdf, below) starts only
-      // after this timer's window and has no timeout of its own, so an agent that
-      // runs close to its full budget would otherwise leave the platform's hard
-      // maxDuration cutoff to kill generate-pdf.mjs mid-render. 600s agent / ~200s
-      // render is ample — a Chromium PDF render normally takes low tens of seconds
-      // even with a cold Playwright launch. evaluate has no post-agent phase at
-      // all — merge-tracker.mjs runs inside the agent's own turn — so it can spend
-      // the same 600s budget entirely on the agent: a real evaluation doing web
-      // research routinely runs past 4m45s, and a shorter timer was killing it
-      // before it could finish (and misreporting the result — see the close
-      // handler below).
-      const killMs = kind === "pdf" || kind === "evaluate" ? 600_000 : 285_000;
+      // Per-kind, with the reason stated on its own row in KINDS above.
       killer = setTimeout(() => {
         try { child.kill("SIGTERM"); } catch { /* ignore */ }
-      }, killMs);
+      }, k.killMs);
       const send = (obj: unknown) => {
         if (closed) return;
         try { controller.enqueue(enc.encode(JSON.stringify(obj) + "\n")); } catch { closed = true; }
@@ -216,7 +275,7 @@ export async function POST(req: Request) {
       // by the agent (#2185). The filter keeps every byte for the backend while
       // holding the 15-25 KB body out of the run log, which is the agent's
       // narration — see cv-envelope.mjs.
-      const cvFilter = kind === "pdf" ? createCvEnvelopeFilter() : null;
+      const cvFilter = k.emitsCvEnvelope ? createCvEnvelopeFilter() : null;
       const sendAgentText = (text: string) => {
         const visible = cvFilter ? cvFilter.push(text) : text;
         if (visible) send({ type: "text", text: visible });
@@ -348,7 +407,7 @@ export async function POST(req: Request) {
           return null;
         };
 
-        if (kind === "pdf") {
+        if (k.emitsCvEnvelope) {
           // Release any text the filter was still holding, so the log keeps the
           // agent's closing narration and its VERDICT line.
           const tail = cvFilter?.flush();
