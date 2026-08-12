@@ -24,7 +24,7 @@ export function QuickEvaluate() {
       setHint(normalized.error);
       return;
     }
-    startEvaluate({ url: normalized.url, page: "/" });
+    startEvaluate({ url: normalized.url, subtitle: normalized.url, page: "/" });
     setUrl("");
     setHint("Evaluating. Watch it in the Workers tray.");
   }

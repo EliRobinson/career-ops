@@ -159,7 +159,7 @@ export async function POST(req: Request) {
   // These run the REAL core (modes/scripts), not just data — fail clearly if the
   // root is incomplete instead of faking it.
   if (k.script && !fs.existsSync(path.join(careerOpsRoot(), k.script))) {
-    return reject(`This needs a complete career-ops checkout (${k.script}). CAREER_OPS_ROOT has data only — point it at a full checkout.`);
+    return reject(`This needs a complete career-ops checkout (${k.script}). CAREER_OPS_ROOT has data only. Point it at a full checkout.`);
   }
 
   // An A–F score is meaningless without a CV to score against — the CLI would

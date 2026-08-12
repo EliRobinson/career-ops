@@ -369,8 +369,12 @@ export function actionExists(id: string): boolean {
 }
 
 export function dispatch(id: string, rawArgs: Record<string, unknown>, ctx: ActionCtx): DispatchResult {
+  // actionExists, not a bare ACTIONS[id] truthiness check: `id` is model-emitted
+  // text from an <<act:ID>> envelope, so "constructor" or "toString" would resolve
+  // off Object.prototype and reach `def.run(...)`. The catch below would absorb the
+  // TypeError, but being safe by accident is not the same as being safe.
+  if (!actionExists(id)) return { status: "ignored", note: `unknown action: ${id}` };
   const def = ACTIONS[id];
-  if (!def) return { status: "ignored", note: `unknown action: ${id}` };
   try {
     return def.run(rawArgs ?? {}, ctx);
   } catch {

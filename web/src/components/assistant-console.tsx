@@ -12,6 +12,7 @@ import { usePipeline } from "@/components/pipeline/pipeline-provider";
 import { useApply } from "@/components/apply/apply-provider";
 import { useExplore } from "@/components/explore/explore-provider";
 import { WorkerCard } from "@/components/jobs/worker-card";
+import { postingKey } from "@/lib/job-url.mjs";
 import { Button } from "@/components/ui/button";
 import { dispatch, type ActionCtx, type DoneInfo } from "@/app/actions/registry";
 import { scoreNum } from "@/lib/format";
@@ -246,7 +247,14 @@ export function AssistantConsole() {
       inbox: pipelineRef.current.inbox,
       applications: pipelineRef.current.applications,
       jobForUrl: (url) => {
-        const m = jobsRef.current.filter((j) => j.input === url).sort((a, b) => b.startedAt - a.startedAt);
+        // postingKey on BOTH sides. Callers canonicalize the needle, but the
+        // haystack is up to 40 jobs restored from localStorage, and any job created
+        // before every launch site routed through startEvaluate still carries a raw
+        // input. Comparing raw here would miss those and re-fire an evaluation the
+        // user already paid for, which is the exact duplicate spend this key exists
+        // to prevent.
+        const key = postingKey(url);
+        const m = jobsRef.current.filter((j) => j.input && postingKey(j.input) === key).sort((a, b) => b.startedAt - a.startedAt);
         return m[0];
       },
       rememberFact: (fact) => {
