@@ -180,9 +180,13 @@ test("buildPrompt: a differing fetchUrl names both URLs and pins which one is re
     today: "2026-08-11",
   });
 
-  // Then both appear...
-  assert.ok(prompt.includes("https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4434693435"));
-  assert.ok(prompt.includes("https://www.linkedin.com/jobs/view/4434693435/"));
+  // Then both appear. Asserted with a regex rather than .includes(): CodeQL reads a
+  // substring test against a URL literal as an incomplete-sanitization check
+  // (js/incomplete-url-substring-sanitization) and fails the run. Nothing is being
+  // sanitized here, but a regex says the same thing and keeps CI honest about the
+  // alerts that DO matter.
+  assert.match(prompt, /https:\/\/www\.linkedin\.com\/jobs-guest\/jobs\/api\/jobPosting\/4434693435/);
+  assert.match(prompt, /https:\/\/www\.linkedin\.com\/jobs\/view\/4434693435\//);
   // ...and the report/tracker URL is pinned to the canonical one, which is the whole
   // point: a tracker full of guest-API links would be useless to click.
   assert.match(prompt, /record[^\n]*https:\/\/www\.linkedin\.com\/jobs\/view\/4434693435\//i);

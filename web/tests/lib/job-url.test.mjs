@@ -103,6 +103,33 @@ test("normalizeJobUrl: trailing sentence punctuation from a pasted paragraph is 
   assert.equal(comma.url, "https://boards.greenhouse.io/acme/jobs/1");
 });
 
+test("normalizeJobUrl: a huge paste is refused before any per-character work", () => {
+  // Given the input that made the old /[.,;!?]+$/ trailing-punctuation regex
+  // quadratic: a long run of matching characters followed by one that fails the
+  // anchor, so the engine restarts one position right and re-consumes the run
+  // (CodeQL js/polynomial-redos). The scan is linear now, and the length bound
+  // stops the work before it starts.
+  const huge = `${"!".repeat(50_000)}x`;
+  const started = Date.now();
+  const r = normalizeJobUrl(huge);
+
+  assert.equal(r.ok, false);
+  assert.match(r.error, /too long/i);
+  // Generous, so this asserts "not quadratic" rather than a machine speed. The
+  // pre-fix regex on this input took orders of magnitude longer than this.
+  assert.ok(Date.now() - started < 1000, "normalizing a huge paste must not scale quadratically");
+});
+
+test("normalizeJobUrl: a long-but-plausible URL is still accepted", () => {
+  // Given the bound must reject abuse without rejecting a real posting URL, which
+  // can carry a substantial query string
+  const long = `https://boards.greenhouse.io/acme/jobs/1?ref=${"a".repeat(1000)}`;
+  const r = normalizeJobUrl(long);
+
+  assert.equal(r.ok, true);
+  assert.equal(r.kind, "generic");
+});
+
 test("normalizeJobUrl: a URL wrapped in angle brackets is unwrapped", () => {
   // Given the Markdown/email convention of wrapping a bare link in <...>
   const r = normalizeJobUrl("<https://boards.greenhouse.io/acme/jobs/1>");

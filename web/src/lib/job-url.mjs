@@ -62,8 +62,21 @@ function stripPasteNoise(s) {
   }
   // Only sentence-ending punctuation a URL never legitimately ends with. Not "/",
   // "]", ")", "%", or "=", any of which can be a real trailing path/query byte.
-  return s.replace(/[.,;!?]+$/, "");
+  //
+  // Scanned backwards rather than matched with /[.,;!?]+$/. That regex is
+  // polynomial on this input: for a paste like "!!!!!!…x" the engine consumes the
+  // whole run, fails on $, restarts one character right and does it again, which is
+  // O(n^2) on a string the user controls the length of (CodeQL js/polynomial-redos).
+  // A backwards walk is linear and states the intent more plainly anyway.
+  let end = s.length;
+  while (end > 0 && TRAILING_PUNCTUATION.includes(s[end - 1])) end--;
+  return s.slice(0, end);
 }
+
+const TRAILING_PUNCTUATION = ".,;!?";
+
+/** Generous next to any real posting URL, small enough to bound the work below. */
+const MAX_URL_LENGTH = 2048;
 
 /**
  * The numeric LinkedIn job id, or null when this URL is not one posting.
@@ -92,6 +105,10 @@ function linkedInJobId(u) {
  */
 export function normalizeJobUrl(raw) {
   if (typeof raw !== "string" || !raw.trim()) return { ok: false, error: "Paste a job posting URL." };
+  // Bound the input before any per-character work touches it. A posting URL is
+  // never anywhere near this long, and the whole prompt is passed to the CLI as a
+  // single argv element, so an unbounded paste is wasted tokens at best.
+  if (raw.length > MAX_URL_LENGTH) return { ok: false, error: "That is too long to be a job posting URL." };
   const trimmed = stripPasteNoise(raw.trim());
   // A paste with no scheme is the common case; anything that already declares one
   // keeps it, so javascript: and file: reach the protocol check below and are refused.
