@@ -37,7 +37,7 @@ const outcome = (overrides) => evaluateRunOutcome({ ...CLEAN, ...overrides });
 const MSG = Object.freeze({
   noReport: "This evaluation didn't save a report, so it's not in your tracker. Full evaluation is verified on Claude Code.",
   cutOffAfterSave: "This run was cut off before it finished, but it had already saved a report. Reload to see it, and re-run if the report looks incomplete.",
-  errored: "This run hit an error before finishing, so it isn't recorded as a confident result — re-run it to verify.",
+  errored: "This run hit an error before finishing, so it isn't recorded as a confident result. Re-run it to verify.",
 });
 
 // ── Arm 1: no output at all ──────────────────────────────────────────────────
@@ -45,14 +45,14 @@ const MSG = Object.freeze({
 test("arm 1: the route's no-output message wins over every other signal", () => {
   // Given a CLI that produced nothing (not installed / not authenticated), the
   // route hands the wording in — this module must not restate or override it.
-  const msg = "The CLI produced no output — is it installed and authenticated? (career-ops is best on Claude Code.)";
+  const msg = "The CLI produced no output. Is it installed and authenticated? (career-ops is best on Claude Code.)";
   assert.deepEqual(outcome({ noOutputMessage: msg }), { ok: false, message: msg });
 });
 
 test("arm 1: it wins even on an otherwise-perfect run", () => {
   // Given every other signal is green, no output is still a failed run: the
   // arm ordering, not just the condition, is what is under test here.
-  const msg = "The CLI exited with an error — is it installed and authenticated?";
+  const msg = "The CLI exited with an error. Is it installed and authenticated?";
   assert.deepEqual(
     outcome({ noOutputMessage: msg, persists: false, cleanExit: true, sawError: false }),
     { ok: false, message: msg },

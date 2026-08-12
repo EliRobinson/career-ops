@@ -95,7 +95,7 @@ function prepareFixPortal(input: string): PrepareResult {
   if (isShellSafeCompanyName(input)) return { ok: true };
   return {
     ok: false,
-    error: "That company name has characters I can't safely pass to the portal checker — rename it in portals.yml first.",
+    error: "That company name has characters I can't safely pass to the portal checker. Rename it in portals.yml first.",
   };
 }
 
@@ -165,7 +165,7 @@ export async function POST(req: Request) {
   // An A–F score is meaningless without a CV to score against — the CLI would
   // hallucinate a fit narrative and still emit a VERDICT. Require cv.md first.
   if (k.needsCv && !fs.existsSync(path.join(careerOpsRoot(), "cv.md"))) {
-    return reject("Add your CV first so I can score this against you — drop it on the home page.");
+    return reject("Add your CV first so I can score this against you. Drop it on the home page.");
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -403,8 +403,8 @@ export async function POST(req: Request) {
         // all is the same failure mode whether it was evaluating or tailoring
         // a PDF — one place for the condition/message pair instead of two.
         const noOutputError = (): string | null => {
-          if (!emittedText && !sawError && !cleanExit) return "The CLI exited with an error — is it installed and authenticated?";
-          if (!emittedText && !sawError) return "The CLI produced no output — is it installed and authenticated? (career-ops is best on Claude Code.)";
+          if (!emittedText && !sawError && !cleanExit) return "The CLI exited with an error. Is it installed and authenticated?";
+          if (!emittedText && !sawError) return "The CLI produced no output. Is it installed and authenticated? (career-ops is best on Claude Code.)";
           return null;
         };
 
@@ -431,7 +431,7 @@ export async function POST(req: Request) {
             // Kept for narrowing, but it must REPORT rather than fall through to a
             // bare close() — a stream that ends with neither error nor done is the
             // one outcome this handler exists to prevent.
-            send({ type: "error", msg: "Internal error: the pdf run passed its gate with no CV to save — please report this." });
+            send({ type: "error", msg: "Internal error: the pdf run passed its gate with no CV to save. Please report this." });
           } else {
             sendWarnings(envelope.warnings);
             if (saveCv(pdfPaths, envelope)) {

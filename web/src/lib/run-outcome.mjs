@@ -87,7 +87,7 @@ export function evaluateRunOutcome({ noOutputMessage, persists, wroteReport, cle
     // confident score off a half-finished run.
     return {
       ok: false,
-      message: "This run hit an error before finishing, so it isn't recorded as a confident result — re-run it to verify.",
+      message: "This run hit an error before finishing, so it isn't recorded as a confident result. Re-run it to verify.",
     };
   }
 
