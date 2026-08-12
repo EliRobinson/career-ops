@@ -130,8 +130,8 @@ export function AddJobDialog({ inboxUrls, onClose }: { inboxUrls: string[]; onCl
         )}
         {errors.length > 0 && (
           <ul className="mt-2 space-y-1">
-            {errors.map((e) => (
-              <li key={e.raw} className="text-xs text-rose-400">
+            {errors.map((e, i) => (
+              <li key={`${e.raw}-${i}`} className="text-xs text-rose-400">
                 {e.error}
               </li>
             ))}
