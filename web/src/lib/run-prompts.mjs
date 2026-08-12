@@ -42,9 +42,17 @@ const SAFE_COMPANY_NAME = /^[\p{L}\p{N} .,&'()+/-]+$/u;
  * other than its canonical URL (LinkedIn: the /jobs/view page is an authwall for a
  * headless agent, its guest endpoint is not).
  *
+ * Interpolated into step 1, right after the "use WebFetch to read the posting"
+ * instruction it belongs next to — carrying the one rule the whole LinkedIn design
+ * depends on (record the canonical URL, never the mirror) is too load-bearing to
+ * leave at the tail of the prompt, after the text that says nothing should follow
+ * the final VERDICT line.
+ *
  * Returns "" when there is nothing to say, which keeps the emitted prompt
  * BYTE-IDENTICAL for every ordinary posting. test-all.mjs's #2185 freeze asserts on
- * that exact string, so this must stay a pure suffix and never edit the lines above it.
+ * that exact string, so a change here must still collapse to "" in the no-mirror
+ * case; it no longer needs to stay a pure suffix, since its interpolation point
+ * moved off the tail.
  *
  * @param {string} input     Canonical posting URL.
  * @param {string|undefined} fetchUrl
@@ -108,7 +116,7 @@ End with EXACTLY one final line: VERDICT: {5 if now live, else 1}/5 — {what yo
   // evaluate (default) — run the REAL oferta mode + persist canonically
   return `You are running the OFFICIAL career-ops job evaluation, HEADLESS, on the user's own machine. Today is ${today}. Run the REAL career-ops evaluation — do NOT improvise your own scoring.
 
-1. Read modes/oferta.md and follow it EXACTLY (blocks A–F, G posting-legitimacy, and the Machine Summary). Ground the fit in THIS person: read cv.md, config/profile.yml and modes/_profile.md. Use WebFetch to read the posting (you are headless — Playwright is unavailable, so use WebFetch and mark the report header "Verification: unconfirmed (batch mode)").
+1. Read modes/oferta.md and follow it EXACTLY (blocks A–F, G posting-legitimacy, and the Machine Summary). Ground the fit in THIS person: read cv.md, config/profile.yml and modes/_profile.md. Use WebFetch to read the posting (you are headless — Playwright is unavailable, so use WebFetch and mark the report header "Verification: unconfirmed (batch mode)").${mirrorClause(input, fetchUrl)}
 
 2. Persist the result CANONICALLY so the web and the CLI share ONE source of truth:
    a. Reserve a report number: run \`node reserve-report-num.mjs\` — its stdout is a 3-digit number (e.g. 035).
@@ -122,6 +130,6 @@ End with EXACTLY one final line: VERDICT: {5 if now live, else 1}/5 — {what yo
 After everything above is written and merged, output EXACTLY one final line, nothing after it:
 VERDICT: {score}/5 — {reason in 12 words or fewer}
 
-Posting URL: ${input}${mirrorClause(input, fetchUrl)}`;
+Posting URL: ${input}`;
 }
 
