@@ -102,15 +102,39 @@ export function linkedInJobId(raw) {
   return cur && /^\d+$/.test(cur) ? cur : null;
 }
 
-/** Decode the handful of entities LinkedIn emits in topcard text. */
+/** The named entities LinkedIn actually emits in topcard text. */
+const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+
+/**
+ * Decode HTML entities in ONE pass.
+ *
+ * Deliberately a single regex rather than a chain of .replace() calls. Chaining
+ * double-unescapes: decoding `&amp;` first rewrites `&amp;lt;` to `&lt;`, which
+ * the next replacement then turns into `<`, so a company literally named
+ * "A&lt;B" would come out as "A<B" (CodeQL js/double-escaping). One pass
+ * consumes each entity exactly once and never re-scans its own output.
+ *
+ * An unrecognized or out-of-range entity is left verbatim: this text becomes a
+ * company name and a job title used for matching, where a wrong character is
+ * worse than an undecoded one.
+ *
+ * @param {string} s
+ * @returns {string}
+ */
 function decodeEntities(s) {
-  return String(s ?? '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
+  return String(s ?? '').replace(
+    /&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([a-zA-Z][a-zA-Z0-9]{1,31}));/g,
+    (match, dec, hex, name) => {
+      if (dec !== undefined || hex !== undefined) {
+        const code = dec !== undefined ? Number.parseInt(dec, 10) : Number.parseInt(hex, 16);
+        // Valid Unicode scalar values only; surrogates and out-of-range are left as-is.
+        if (!Number.isFinite(code) || code <= 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) return match;
+        return String.fromCodePoint(code);
+      }
+      const named = NAMED_ENTITIES[name.toLowerCase()];
+      return named === undefined ? match : named;
+    },
+  );
 }
 
 function collapse(s) {
@@ -562,6 +586,16 @@ function runSelfTest() {
   check(easy.offsiteApply === false, 'parseGuestPosting reports Easy Apply as not offsite');
   check(parseGuestPosting('').title === '' && parseGuestPosting(null).company === '', 'parseGuestPosting never throws on empty input');
   check(parseGuestPosting('<h2 class="topcard__title">R&amp;D Engineer</h2>').title === 'R&D Engineer', 'parseGuestPosting decodes entities');
+  // Entity decoding must not re-scan its own output (CodeQL js/double-escaping).
+  // Chained .replace() calls turned "&amp;lt;" into "<"; one pass yields "&lt;".
+  check(parseGuestPosting('<h2 class="topcard__title">A&amp;lt;B</h2>').title === 'A&lt;B', 'decodeEntities does not double-unescape');
+  check(parseGuestPosting('<h2 class="topcard__title">A&amp;amp;B</h2>').title === 'A&amp;B', 'decodeEntities decodes a doubled ampersand exactly once');
+  check(parseGuestPosting('<h2 class="topcard__title">caf&#233; Lead</h2>').title === 'café Lead', 'decodeEntities decodes a decimal entity');
+  check(parseGuestPosting('<h2 class="topcard__title">caf&#xE9; Lead</h2>').title === 'café Lead', 'decodeEntities decodes a hex entity');
+  check(parseGuestPosting('<h2 class="topcard__title">100&#37; Remote</h2>').title === '100% Remote', 'decodeEntities handles a numeric entity mid-string');
+  check(parseGuestPosting('<h2 class="topcard__title">Sales &amp;lt;3 Ops</h2>').title === 'Sales &lt;3 Ops', 'decodeEntities leaves an escaped entity escaped');
+  check(parseGuestPosting('<h2 class="topcard__title">R&nosuchentity; Dev</h2>').title === 'R&nosuchentity; Dev', 'decodeEntities leaves an unknown entity verbatim');
+  check(parseGuestPosting('<h2 class="topcard__title">Bad&#xD800; Dev</h2>').title === 'Bad&#xD800; Dev', 'decodeEntities refuses a surrogate code point');
 
   // candidateSlugs - each source rescues cases the other loses (verified live:
   // "Gradial"/gradialai resolves from the name, "Assembled"/assembledhq only
