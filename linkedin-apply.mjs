@@ -308,6 +308,28 @@ export async function fetchGuestPosting(jobId, ctx) {
 }
 
 /**
+ * Vendors whose slug namespace is trustworthy enough to APPLY to without a human
+ * confirming the employer first.
+ *
+ * Not a quality judgement about the ATS, it is about slug collisions. A board URL
+ * is built from a guessed slug, and nothing in a provider's response identifies
+ * the employer: they all echo the company name we passed in. So the only defence
+ * against resolving to a stranger's board is how likely an arbitrary slug is to
+ * belong to someone else on that vendor.
+ *
+ * Measured, not assumed: probing "whatnot" returned a live, valid, EMPTY board on
+ * workable, smartrecruiters AND breezy. Had any of them listed a common title like
+ * "Senior Software Engineer", this module would have handed back another company's
+ * application form with high confidence. Greenhouse, Ashby and Lever 404 an unknown
+ * slug instead, which is what makes them safe to auto-resolve.
+ *
+ * Long-tail vendors still resolve; their result is returned as a candidate for the
+ * user to eyeball rather than applied to automatically. Coverage is kept, the
+ * silent wrong answer is not.
+ */
+const AUTO_RESOLVE_VENDORS = new Set(['greenhouse', 'ashby', 'lever']);
+
+/**
  * Corporate-form suffixes LinkedIn appends to disambiguate a company vanity URL
  * ("whatnot-inc"). Safe to strip because they denote legal form rather than brand.
  * Deliberately NOT stripping things like "ai" or "hq": those are part of the brand
@@ -415,7 +437,7 @@ export async function resolveApplyUrl(url, opts = {}) {
     return {
       ok: false,
       status: 'unresolved',
-      reason: `no Greenhouse, Ashby or Lever board found for ${posting.company}: ${boardReason}`,
+      reason: `no supported ATS board found for ${posting.company}: ${boardReason}`,
       posting,
       board: null,
       applyUrl: null,
@@ -431,6 +453,21 @@ export async function resolveApplyUrl(url, opts = {}) {
   }
 
   const picked = pickMatch(posting.title, jobs, { location: posting.location });
+  // A confident title match on a collision-prone vendor is still only a confident
+  // match against a board we GUESSED belongs to this employer. Hand it back as a
+  // candidate so a human confirms the company, rather than auto-applying to it.
+  if (picked.status === 'resolved' && !AUTO_RESOLVE_VENDORS.has(resolved.vendor)) {
+    return {
+      ok: false,
+      status: 'ambiguous',
+      reason: `matched a posting on ${posting.company}'s ${resolved.vendor} board, but that vendor's slugs collide across companies, so confirm this is the right employer before applying`,
+      posting,
+      board: { vendor: resolved.vendor, slug: resolved.slug, careers_url: resolved.careers_url, jobCount: resolved.jobCount },
+      applyUrl: null,
+      confidence: Number(picked.match.score.toFixed(3)),
+      candidates: picked.candidates.map((c) => ({ title: c.title, url: c.url, location: c.location, score: Number(c.score.toFixed(3)) })),
+    };
+  }
   return {
     ok: picked.status === 'resolved',
     status: picked.status,
@@ -638,6 +675,14 @@ function runSelfTest() {
   check(readApplyUrl(written) === 'https://job-boards.greenhouse.io/acme/jobs/1', 'readApplyUrl reads the field back');
   check(readApplyUrl(report) === '', 'readApplyUrl returns empty when unset');
   check(readApplyUrl('# X\n\n---\n\n## A\n**Apply URL:** https://body/1\n') === '', 'readApplyUrl ignores a body line outside the header');
+
+  // AUTO_RESOLVE_VENDORS gates which boards may be applied to without a human
+  // confirming the employer. Measured risk: probing "whatnot" returned live, valid,
+  // EMPTY boards on workable/smartrecruiters/breezy, so an arbitrary slug reaching
+  // a stranger's board on those vendors is demonstrated, not hypothetical.
+  check(AUTO_RESOLVE_VENDORS.has('greenhouse') && AUTO_RESOLVE_VENDORS.has('ashby') && AUTO_RESOLVE_VENDORS.has('lever'), 'the 404-on-unknown-slug vendors auto-resolve');
+  check(!AUTO_RESOLVE_VENDORS.has('workable') && !AUTO_RESOLVE_VENDORS.has('smartrecruiters') && !AUTO_RESOLVE_VENDORS.has('breezy'), 'collision-prone vendors do not auto-resolve');
+  check(AUTO_RESOLVE_VENDORS.size === 3, 'auto-resolve stays an allowlist, not a denylist');
 
   // House rule: no em dash reaches the user, including pass-through upstream text.
   check(!noEmDash('board found — but empty').includes('—'), 'noEmDash strips a pass-through em dash');
