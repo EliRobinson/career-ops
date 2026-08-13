@@ -114,6 +114,11 @@ data/model-blacklist.json
 # CLI-specific local config
 .claude/settings.local.json
 .claude/memory/
+# Dev-server launch config for the Claude Code preview pane, and the scratch
+# worktrees it creates. Both are per-machine tooling state, and career-ops is
+# CLI-agnostic, so neither belongs in a shared tree.
+.claude/launch.json
+.claude/worktrees/
 .opencode/settings.local.json
 .opencode/memory/
 # OpenCode project config (often holds personal MCP/model/per-machine prefs).
