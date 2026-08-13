@@ -409,6 +409,7 @@ One TSV file per evaluation at `batch/tracker-additions/{num}-{company-slug}.tsv
 2. **UPDATE status/notes of existing entries via `node set-status.mjs <report#|company> <State> [--note]`** — the canonical (locked, validated, atomic) write path. Do not hand-edit the table.
 3. All reports MUST include `**URL:**` in the header (between Score and PDF), and `**Legitimacy:** {tier}` (see Block G in `modes/oferta.md`).
    - `**Apply URL:**` is an OPTIONAL extra header line holding the link to the actual application form, for postings where that is not the same page as `**URL:**` (LinkedIn). `**URL:**` keeps its meaning as the canonical link the tracker records; never overwrite it with the apply link. Written by `linkedin-apply.mjs` (only on a confident resolve, or when the user picks/pastes one) and preferred by the web Apply button.
+   - Reaching a LinkedIn **Easy Apply** posting is a different problem: its form lives on LinkedIn, so there is no external URL to reconstruct. That case is served by the opt-in signed-in browser profile (`apply.signed_in_profile` in `config/profile.yml`, toggled from web Config), which runs the apply session in a dedicated browser profile the user signs into themselves. Never the user's everyday Chrome profile, and career-ops never handles the password.
 4. All statuses MUST be canonical (see `templates/states.yml`).
 5. Health check: `node verify-pipeline.mjs` · Normalize statuses: `node normalize-statuses.mjs` · Dedup: `node dedup-tracker.mjs`
 
