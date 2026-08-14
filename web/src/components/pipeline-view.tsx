@@ -165,13 +165,14 @@ export function PipelineView({
               key={t}
               onClick={() => setParams({ tab: t === "INBOX" ? null : t })}
               className={cn(
-                "-mb-px inline-flex items-center justify-center border-b-2 px-3 py-2 text-xs font-medium transition-colors max-sm:min-h-[44px]",
+                "-mb-px inline-flex items-center justify-center gap-1 border-b-2 px-3 py-2 text-xs font-medium transition-colors max-sm:min-h-[44px]",
                 tab === t
                   ? "border-brand text-foreground"
                   : "border-transparent text-muted hover:text-foreground",
               )}
             >
-              {t} <span className="text-faint tabular-nums">{count}</span>
+              {t}
+              <span className="text-faint tabular-nums">{count}</span>
             </button>
           );
         })}
