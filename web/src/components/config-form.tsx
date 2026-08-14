@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { CadenceSettings } from "@/components/followups/cadence-settings";
+import { DefaultTabSetting } from "@/components/pipeline/default-tab-setting";
 import { SignedInBrowser } from "@/components/apply/signed-in-browser";
 import { CONFIG_KEY, readConfig, readCliId, saveCliId, pickDefaultCli } from "@/lib/cli-config.mjs";
 
@@ -295,6 +296,8 @@ export function ConfigForm() {
           />
         </span>
       </button>
+
+      <DefaultTabSetting />
 
       <SignedInBrowser />
 

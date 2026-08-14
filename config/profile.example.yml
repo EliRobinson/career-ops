@@ -311,3 +311,15 @@ cover_letter:
 # apply:
 #   signed_in_profile: false
 #   profile_dir: ""
+
+# ---------------------------------------------------------------------------
+# WEB APP VIEW PREFERENCES (optional, set from Config in the web app)
+# ---------------------------------------------------------------------------
+#
+#   default_pipeline_tab: which tab the Pipeline page opens on when the URL
+#                         names none. One of INBOX, ALL, EVALUATED, APPLIED,
+#                         RESPONDED, INTERVIEW, OFFER, HIRED, REJECTED,
+#                         DISCARDED, SKIP. Default (key absent): INBOX.
+#
+# web:
+#   default_pipeline_tab: INBOX
