@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawnHeadlessCli } from "@/lib/spawn-cli.mjs";
 import { resolveCli } from "@/lib/clis";
 import { careerOpsRoot } from "@/lib/career-ops";
 
@@ -164,8 +164,11 @@ export async function runPlanner(opts: {
   log(`Planner: ${opts.cliId} (${binPath}) · timeout ${Math.round(killMs / 1000)}s`);
 
   return new Promise((resolve) => {
-    // stdin = /dev/null so the CLI does not wait on piped input.
-    const child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+    // spawnHeadlessCli closes stdin right after spawning, so the CLI doesn't
+    // wait on piped input that will never arrive. It is the single spawn path
+    // for CLI-invoking routes, replacing the stdio: ["ignore", …] this used to
+    // spell for the same reason.
+    const child = spawnHeadlessCli(binPath, args, { cwd: careerOpsRoot(), env: process.env });
     let buf = "";
     let firstByteAt = 0;
     const started = Date.now();

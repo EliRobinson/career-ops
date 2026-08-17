@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import yaml from "js-yaml";
+import * as yaml from "js-yaml";
 import { chromium, type BrowserContext, type Page } from "playwright-core";
 import { careerOpsRoot } from "@/lib/career-ops";
 
