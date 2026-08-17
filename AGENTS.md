@@ -75,6 +75,19 @@ If `{"status": "update-available", "local": ..., "remote": ..., "changelog": ...
 
 If yes → `node update-system.mjs apply`. If no → `node update-system.mjs dismiss`. Every other status (`up-to-date`, `dismissed`, `offline`, `no-remote-version`) → say nothing. The user can force a check anytime ("check for updates" / "update career-ops"); rollback: `node update-system.mjs rollback`.
 
+### THIS FORK UPDATES BY MERGE, NEVER BY `apply` (CRITICAL)
+
+**Never run `node update-system.mjs apply` in this checkout. Sync with `git merge upstream/main` instead.**
+
+`apply` is a raw `git checkout` of every `SYSTEM_PATHS` entry from upstream, not a merge; the source calls this out itself ("this is NOT a merge, by design"). This fork diverges from upstream in about 70 system-layer files, so `apply` would silently discard, among others:
+
+- the npm → pnpm command names in `package.json`, `docs/SCRIPTS.md`, `README*.md`, `cops`, `Dockerfile`, `.github/workflows/*` and the `--help` text of several `*.mjs` scripts
+- the house rules in this file (no em dashes, fork-first PRs, this rule)
+
+`config/local-paths.txt` does **not** cover any of that: it refuses, by design, every path the system layer already ships, which is exactly where these changes live. It is only for files upstream does not ship at all.
+
+To update: `git fetch upstream && git merge upstream/main`, resolve conflicts keeping the fork's `pnpm` spelling and upstream's structure, then run `node test-all.mjs` and the `web` suite before pushing.
+
 ## What is career-ops
 
 AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluation, CV generation, portal scanning, batch processing. Runs on any AI coding CLI following the [open agent skill standard](https://agentskills.io) (Claude Code, Cursor, Codex, OpenCode, Qwen, Copilot, Kimi, Antigravity CLI, Grok Build CLI). Legacy Gemini API evaluation remains via `gemini-eval.mjs`.
