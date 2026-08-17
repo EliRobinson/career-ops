@@ -256,6 +256,15 @@ check('tex: with the sentinel, \\end{document} survives', texWith.includes('\\en
 const texWithout = stripEmptySections(TEX_NO_SENTINEL, EMPTY, 'tex');
 check('tex: with no sentinel, empty skills is a no-op (fail-safe)', texWithout, TEX_NO_SENTINEL);
 check('tex: with no sentinel, \\end{document} survives', texWithout.includes('\\end{document}'), true);
+// The two checks above are narrowing diagnostics under the exact-equality check
+// on the previous line, not independent coverage: that one already pins the
+// whole template byte for byte, so anything these catch it catches too. They
+// earn their place by naming WHICH half of the fail-safe broke, so a regression
+// reports "half-eaten banner" instead of only a full-template diff.
+// The substring is the right probe for that: when the boundary loses its `^`
+// anchor the engine backtracks the opening banner's own greedy trailing `%{4,}`
+// and consumes the heading with it, leaving `%%%%\nskills\n\end{document}`. The
+// heading text is gone in that state, so this assertion goes red.
 check('tex: with no sentinel, no half-eaten banner is left behind',
   texWithout.includes('Technical Skills'), true);
 
