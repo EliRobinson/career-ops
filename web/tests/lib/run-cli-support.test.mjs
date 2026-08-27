@@ -483,3 +483,16 @@ test("the fallback still catches every real failure it caught before", () => {
     assert.equal(isFatalGenericStderr(line), true, `real failure no longer detected: ${line}`);
   }
 });
+
+// #3124: evaluate runs were killed at 285s (well under the 800s maxDuration) and
+// the kill was then misreported as "didn't save a report", blaming the CLI for a
+// limit the route imposed. Per-kind budgets now live in route.ts's KINDS table;
+// this guards the honest timeout message.
+import { timeoutMessage } from "../../src/lib/run-cli-support.mjs";
+
+test("a timed-out run reads as a timeout, never as 'didn't save a report' (#3124)", () => {
+  const msg = timeoutMessage(780_000, "evaluate");
+  assert.match(msg, /780s time limit/, "the message names the limit it hit");
+  assert.match(msg, /re-run|Claude Code/i, "it offers a next step");
+  assert.doesNotMatch(msg, /didn't save a report/i, "a timeout must not be blamed on the CLI's ability to write");
+});

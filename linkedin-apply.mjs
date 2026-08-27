@@ -32,7 +32,7 @@
  */
 
 import { readFileSync, writeFileSync } from 'fs';
-import { pathToFileURL } from 'url';
+import { isMainModule } from './lib/is-main-module.mjs';
 
 import { makeHttpCtx } from './providers/_http.mjs';
 import { resolveCompany, deriveSlug, SLUG_RE } from './discover-ats.mjs';
@@ -811,7 +811,7 @@ async function main() {
   if (result.status === 'unresolved') process.exit(2);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta.url)) {
   main().catch((error) => {
     console.error(`linkedin-apply: ${error.message}`);
     process.exit(1);

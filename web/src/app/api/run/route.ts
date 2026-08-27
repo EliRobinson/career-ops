@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveCli } from "@/lib/clis";
-import { accumulateTokens, hasNewCompletedReport, isFatalGenericStderr } from "@/lib/run-cli-support.mjs";
+import { accumulateTokens, hasNewCompletedReport, isFatalGenericStderr, timeoutMessage } from "@/lib/run-cli-support.mjs";
 import { spawnHeadlessCli } from "@/lib/spawn-cli.mjs";
 import { careerOpsRoot, readMemory, findReportFile, readInbox, readScanDates } from "@/lib/career-ops";
 import { resolvePdfPaths, type PdfPaths } from "@/lib/pdf-paths.mjs";
@@ -106,11 +106,13 @@ function prepareFixPortal(input: string): PrepareResult {
 }
 
 const KINDS: Record<string, KindSpec> = {
-  // killMs 600s: no post-agent phase at all (merge-tracker.mjs runs inside the
+  // killMs 780s: no post-agent phase at all (merge-tracker.mjs runs inside the
   // agent's own turn), so the whole budget goes to the agent — a real evaluation
   // doing web research routinely runs past 4m45s, and a shorter timer was killing
-  // it before it could finish (and misreporting the result, see the close handler).
-  evaluate: { script: "modes/oferta.md", needsCv: true, holdsTrackerWrite: true, persistsReport: true, killMs: 600_000, prepare: prepareEvaluate },
+  // it before it could finish (and misreporting the result, see the close
+  // handler). 780s leaves ~20s of the route's 800s maxDuration for a graceful
+  // shutdown (#3124).
+  evaluate: { script: "modes/oferta.md", needsCv: true, holdsTrackerWrite: true, persistsReport: true, killMs: 780_000, prepare: prepareEvaluate },
   // killMs 600s: the agent only tailors content now (rendering moved to the
   // backend, #2172), and the render+mark phase starts only AFTER this timer's
   // window with no timeout of its own — 600s here leaves ~200s of the route's
@@ -290,17 +292,51 @@ export async function POST(req: Request) {
       };
       let lastTokens = 0; // per-run token cost from the CLI's structured usage event (#6) — local only
       let lastCostUsd: number | null = null;
-      // Per-kind, with the reason stated on its own row in KINDS above.
+      // Per-kind, with the reason stated on its own row in KINDS above. pdf
+      // keeps 600s because its render+mark phase runs AFTER this timer; evaluate
+      // has no such phase, so it can use almost the whole 800s maxDuration — 285s
+      // was cutting real evaluations off mid-run (reading the mode and profile,
+      // fetching the posting, ~25 Bash calls and a few web searches routinely run
+      // past it), and the SIGTERM then surfaced as "didn't save a report" (see the
+      // close handler), blaming the CLI for a limit we imposed (#3124).
+      const killMs = k.killMs;
+      // Set by the killer so the close handler can tell "we timed it out" apart
+      // from "the CLI exited on its own" — different failures, different message.
+      let killedByTimeout = false;
       killer = setTimeout(() => {
+        killedByTimeout = true;
         try { child.kill("SIGTERM"); } catch { /* ignore */ }
-      }, k.killMs);
+      }, killMs);
+      // Declared before send() so send() can clear it the moment it sees the
+      // client disconnect; assigned just below, once close() exists.
+      let heartbeat: ReturnType<typeof setInterval> | undefined;
       const send = (obj: unknown) => {
         if (closed) return;
-        try { controller.enqueue(enc.encode(JSON.stringify(obj) + "\n")); } catch { closed = true; }
+        try {
+          controller.enqueue(enc.encode(JSON.stringify(obj) + "\n"));
+        } catch {
+          // The client is gone. Stop the heartbeat here rather than waiting for
+          // close(): the child can still run for minutes (maxDuration 800s), and
+          // a user retrying a failed run would otherwise accumulate one live
+          // timer per abandoned request.
+          closed = true;
+          if (heartbeat) clearInterval(heartbeat);
+        }
       };
+      // Time-based keepalive. The stream is silent whenever the agent is thinking
+      // or inside a long tool call, and in pdf mode it is silent for the whole
+      // 15-25 KB <<cv-html>> envelope (cvFilter swallows every byte). Measured
+      // idle gaps on a real pdf run reached 149s — long enough for the browser or
+      // a proxy to drop the connection, after which the client reports
+      // "Connection error" even though the agent finished and the PDF rendered.
+      // It must be a timer, not a hook on incoming text: piggy-backing on agent
+      // output cannot fire during exactly the silences it needs to cover.
+      // Unknown event types are ignored by the client's switch, so old tabs are safe.
+      heartbeat = setInterval(() => send({ type: "keepalive" }), 10_000);
       const close = () => {
         if (!closed) {
           closed = true;
+          if (heartbeat) clearInterval(heartbeat);
           if (killer) clearTimeout(killer);
           releaseWriteTokenOnce();
           try { controller.close(); } catch { /* */ }
@@ -434,6 +470,19 @@ export async function POST(req: Request) {
         // run could still start a brand-new render (and re-touch the tracker)
         // after the stream — and its writeToken guard — is already gone.
         if (closed) return;
+        // A timeout is the ROOT cause behind every "no report / not clean"
+        // symptom the gates below test, so classify it FIRST, for any kind.
+        // Otherwise a run we cut off at the time limit reads as "the CLI couldn't
+        // save a report" and sends the user to re-check a CLI that was working
+        // fine (#3124). code is null here (killed by signal), which the gates
+        // would read as a generic non-clean exit.
+        if (killedByTimeout) {
+          send({
+            type: "error",
+            msg: timeoutMessage(killMs, kind),
+          });
+          return close();
+        }
         // A final JSONL line with no trailing newline stays in `buf` forever
         // otherwise — flush it through the same parser so the usage/result event it
         // usually carries (the last one of a run) isn't lost. Ahead of the pdf branch,

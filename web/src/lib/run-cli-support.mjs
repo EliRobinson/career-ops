@@ -340,3 +340,11 @@ export function hasNewCompletedReport(beforeEntries, afterEntries) {
   }
   return false;
 }
+
+// Message for a run the route stopped at its own time limit. It names the limit,
+// offers a re-run / Claude Code, and DELIBERATELY never says the CLI "didn't save
+// a report": a timeout and a CLI that couldn't write are different failures, and
+// blaming the CLI sends the user to re-check the wrong thing (#3124).
+export function timeoutMessage(killMs, kind) {
+  return `This run passed the ${Math.round(killMs / 1000)}s time limit and was stopped before it could finish — re-run it, or run a very long ${kind} on Claude Code directly. The CLI was working; we cut it off, so it isn't recorded as a result.`;
+}

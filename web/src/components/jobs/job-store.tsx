@@ -121,7 +121,12 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
         // null, so the error below now means what it says.
         const cliId = await resolveCliId();
         if (!cliId) {
-          patch(id, (j) => ({ ...j, status: "error", endedAt: Date.now(), steps: [...j.steps, { kind: "status", label: "No CLI configured - open Config", ts: Date.now() }] }));
+          patch(id, (j) => ({
+            ...j,
+            status: "error",
+            endedAt: Date.now(),
+            steps: [...j.steps, { kind: "status", label: "No CLI configured — open Config and click Save config", ts: Date.now() }],
+          }));
           return;
         }
 

@@ -3,9 +3,9 @@
  * discover-ats.mjs — Company-list → scannable ATS board resolver for career-ops
  *
  * Takes a list of companies and resolves each to a scannable ATS board by
- * probing the public JSON APIs career-ops already supports (Greenhouse, Ashby,
- * Lever) via the existing providers/ layer — zero LLM tokens, zero auth. A
- * company "resolves" when a vendor's board exists AND currently lists ≥1 job.
+ * probing the public JSON APIs career-ops already supports (see VENDOR_ORDER)
+ * via the existing providers/ layer — zero LLM tokens, zero auth. A company
+ * "resolves" when a vendor's board exists AND currently lists ≥1 job.
  *
  * portals.yml is a USER-LAYER file, so by DEFAULT this command is preview-only:
  * it prints the entries it WOULD add (pendingEntries) and writes nothing. Pass
@@ -31,10 +31,11 @@
  * Issue #1864 — github.com/santifer/career-ops
  */
 
-import { readFileSync, existsSync, writeFileSync, renameSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
-import { fileURLToPath, pathToFileURL } from 'url';
+import { fileURLToPath } from 'url';
 import * as yaml from 'js-yaml';
+import { renameSyncWithRetry } from './tracker-utils.mjs';
 
 import { makeHttpCtx } from './providers/_http.mjs';
 import greenhouse from './providers/greenhouse.mjs';
@@ -49,9 +50,12 @@ import bamboohr from './providers/bamboohr.mjs';
 import pinpoint from './providers/pinpoint.mjs';
 import rippling from './providers/rippling.mjs';
 import joinProvider from './providers/join.mjs';
+import { isMainModule } from './lib/is-main-module.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
-const PORTALS_PATH = process.env.CAREER_OPS_PORTALS || join(CAREER_OPS, 'portals.yml');
+const DATA_ROOT = getCareerOpsRoot();
+const PORTALS_PATH = process.env.CAREER_OPS_PORTALS || join(DATA_ROOT, 'portals.yml');
 
 // Safe charset for a slug that will be interpolated into an ATS URL. Consistent
 // with the SLUG_RE guard in scan-ats-full.mjs and seeds/vc-portfolios.mjs — a
@@ -100,12 +104,15 @@ const VENDORS = {
   pinpoint:        { id: 'pinpoint',        provider: pinpoint,        hostFor: (s) => `${lower(s)}.pinpointhq.com`, buildUrl: (s) => `https://${lower(s)}.pinpointhq.com` },
 };
 // Slug-resolvable vendors, probed in order for each company (first match wins).
-// Probe order is also a cost decision. resolveCompany returns on the FIRST match,
-// so keeping the three highest-hit-rate vendors first means the common case still
-// costs the same three requests it always did, and the long tail is only paid for
-// by a company none of them could resolve. A company on no supported board now
-// costs one request per vendor before giving up, which is the honest price of the
-// extra coverage.
+// Probe order is also a cost decision. resolveCompany probes candidates in this
+// order and returns on the FIRST match, so a resolvable company pays only for the
+// vendors ahead of its own: one probe on Greenhouse, two on Ashby, three on
+// Lever. Keeping the three highest-hit-rate vendors first therefore leaves every
+// company they can resolve costing exactly what it did before this list grew, and
+// the long tail is paid for only by a company none of the three could resolve.
+// A company on no supported board is the case that got more expensive: it now
+// probes every vendor before giving up, which is the honest price of the extra
+// coverage.
 const VENDOR_ORDER = ['gh', 'ashby', 'lever', 'workable', 'smartrecruiters', 'recruitee', 'bamboohr', 'breezy', 'pinpoint', 'rippling', 'join'];
 
 // Workday instance subdomains, most common first. Used only when the user gives
@@ -127,8 +134,10 @@ const USAGE = `Usage:
 portals.yml is a user-layer file: this command NEVER writes it unless you pass
 --write. The default previews the entries it would add (see pendingEntries).
 
-Vendors: gh, ashby, lever (resolve from a name/slug) and workday (resolves from
-a coordinate hint — a name alone can't locate a Workday site). Default: all four.
+Vendors: gh, ashby, lever, workable, smartrecruiters, recruitee, bamboohr,
+breezy, pinpoint, rippling, join (all resolve from a name/slug) and workday
+(resolves from a coordinate hint — a name alone can't locate a Workday site).
+Default: all of them, probed in that order, first match wins.
 
 Input YAML shape:
   companies:
@@ -231,15 +240,19 @@ export function parseCompanyInput(rawYaml, cliNames = []) {
  * Build the candidate {vendor, slug, careers_url} probes for one company.
  * SLUG_RE is enforced before every interpolation — the SSRF choke point.
  * A vendor whose slug fails the guard is skipped (recorded in `skipped`).
+ * A vendor that CAN'T represent this slug at all — the URL is well-formed and
+ * on the right host, but the provider's own contract rejects its shape — is
+ * recorded in `unsupported` and never becomes a candidate (see below).
  *
  * @param {{name:string, slug?:string}} company
  * @param {string[]} [vendors]  Subset of VENDOR_ORDER.
- * @returns {{candidates: {vendor:string, slug:string, careers_url:string}[], skipped: string[]}}
+ * @returns {{candidates: {vendor:string, slug:string, careers_url:string}[], skipped: string[], unsupported: string[]}}
  */
 export function buildCandidateUrls(company, vendors = VENDOR_ORDER) {
   const slug = company.slug || deriveSlug(company.name);
   const candidates = [];
   const skipped = [];
+  const unsupported = [];
   for (const vendor of vendors) {
     const cfg = VENDORS[vendor];
     if (!cfg) continue;
@@ -264,9 +277,30 @@ export function buildCandidateUrls(company, vendors = VENDOR_ORDER) {
       skipped.push(vendor);
       continue;
     }
+    // Last gate, and the only one that knows each vendor's REAL slug contract:
+    // ask the provider itself whether it can derive an API URL from this URL.
+    // detect() is pure and local (a URL parse, no network, no side effects).
+    //
+    // The host assertion above can't catch this: `expected` is built by the same
+    // concatenation as the URL, so for a subdomain vendor a dotted slug like
+    // `foo.bar` yields host === expected === `foo.bar.bamboohr.com` and sails
+    // through — the suffix is always appended, so nothing escapes the vendor
+    // domain (no SSRF), but that host cannot exist. Every subdomain provider
+    // pins a SINGLE tenant label (`^[a-z0-9][a-z0-9-]*\.bamboohr\.com$`), and
+    // several path vendors have their own slug shape too, so their detect()
+    // returns null. Left in, such a candidate is recorded as a probe ERROR
+    // ("no API URL derivable") indistinguishable from a transient network
+    // failure, which drags resolveCompany's reason to "board status unknown —
+    // re-run" and invites a retry that can never succeed. Deriving the rule from
+    // the provider rather than re-declaring a slug regex here means the
+    // discovery guard and the provider contract cannot drift apart.
+    if (!cfg.provider.detect({ name: company.name, careers_url })) {
+      unsupported.push(vendor);
+      continue;
+    }
     candidates.push({ vendor, slug, careers_url });
   }
-  return { candidates, skipped };
+  return { candidates, skipped, unsupported };
 }
 
 // Coordinate token guard — tenant/instance/site segments interpolated into a
@@ -465,8 +499,29 @@ export async function probeVendor(company, candidate, ctx) {
     const jobCount = Array.isArray(jobs) ? jobs.length : 0;
     return { status: jobCount > 0 ? 'match' : 'empty', jobCount };
   } catch (err) {
-    return { status: 'error', jobCount: 0, error: err?.message || String(err) };
+    /** @type {any} */
+    const out = { status: 'error', jobCount: 0, error: err?.message || String(err) };
+    // _http.mjs attaches the numeric status to the thrown error; keeping it is
+    // what lets the caller tell a definitive 404 from a transient 5xx instead of
+    // re-parsing the message text (#2883).
+    if (Number.isInteger(err?.status)) out.httpStatus = err.status;
+    return out;
   }
+}
+
+/**
+ * Whether a probe failure ESTABLISHES that no board exists.
+ *
+ * 404 and 410 are answers: the vendor was reached and said the board is not
+ * there. Everything else — 5xx, a timeout, DNS, a rejected redirect, or a
+ * candidate whose API URL could not even be derived — leaves the question open,
+ * because nothing ever answered it.
+ *
+ * @param {{httpStatus?: number}} probeError
+ * @returns {boolean}
+ */
+export function isDefinitiveAbsence(probeError) {
+  return probeError?.httpStatus === 404 || probeError?.httpStatus === 410;
 }
 
 /**
@@ -522,7 +577,7 @@ export async function resolveWorkday(company, coords, ctx) {
  * probe Workday. Returns either a resolved record or an unresolved record.
  */
 export async function resolveCompany(company, { vendors = VENDOR_ORDER, ctx, includeWorkday = true } = {}) {
-  const { candidates, skipped } = buildCandidateUrls(company, vendors);
+  const { candidates, skipped, unsupported } = buildCandidateUrls(company, vendors);
   const triedVendors = [];
   const emptyBoards = [];
   const errors = [];
@@ -546,7 +601,11 @@ export async function resolveCompany(company, { vendors = VENDOR_ORDER, ctx, inc
     if (result.status === 'empty') {
       emptyBoards.push({ vendor: candidate.vendor, careers_url: candidate.careers_url });
     } else {
-      errors.push({ vendor: candidate.vendor, error: result.error });
+      /** @type {any} */
+      const entry = { vendor: candidate.vendor, error: result.error };
+      if (Number.isInteger(result.httpStatus)) entry.httpStatus = result.httpStatus;
+      if (isDefinitiveAbsence(result)) entry.definitive = true;
+      errors.push(entry);
     }
   }
 
@@ -575,9 +634,17 @@ export async function resolveCompany(company, { vendors = VENDOR_ORDER, ctx, inc
       : (company.workday && typeof company.workday === 'object'));
   const reason = emptyBoards.length
     ? 'board(s) found but currently list 0 jobs — re-run later or force-add manually'
-    // Every probe errored (transient network/HTTP), and nothing was confirmed
-    // absent or empty — don't claim "no board found", the status is unknown.
-    : (errors.length && !coords)
+    // Every probe errored and nothing was confirmed absent or empty — don't
+    // claim "no board found", the status is unknown.
+    //
+    // Unless every failure was DEFINITIVE. A 404 from Greenhouse/Ashby/Lever is
+    // an answer, not a hiccup: the board is not there and re-running will say so
+    // again. Advising a retry in that case erased the difference between "this
+    // company has no board" and "the network hiccuped", which is exactly the
+    // pair a user pruning portals.yml has to tell apart (#2883). One transient
+    // failure among them is enough to leave the question open — that vendor
+    // never answered, so absence is not established.
+    : (errors.length && !coords && !errors.every(isDefinitiveAbsence))
       ? 'probe error(s) occurred — board status unknown, see errors[] and re-run'
       // A hint was given but rejected by parseWorkdayHint (bad chars, missing
       // tenant/site): tell the user to fix it, not to add one.
@@ -585,13 +652,23 @@ export async function resolveCompany(company, { vendors = VENDOR_ORDER, ctx, inc
         ? 'Workday hint given but rejected (invalid/missing tenant or site) — check the `workday` field and re-run'
         : coords
           ? 'Workday coordinates given but no live board with open jobs found at the probed host(s).'
-          : 'no Greenhouse/Ashby/Lever board found. If this company uses Workday, add a hint — '
-            + 'a full careers URL (workday: https://<tenant>.wd<N>.myworkdayjobs.com/<site>) or '
-            + 'workday: {tenant, site} — and re-run; discover-ats will confirm and add it.';
+          // Nothing was probeable: every vendor's own contract rejected this
+          // slug's shape, so no board was ruled out — say that, rather than
+          // implying we looked and found nothing.
+          : (!candidates.length && unsupported.length)
+            ? `slug "${company.slug || deriveSlug(company.name)}" is not a valid board slug for any probed vendor `
+              + `(${unsupported.join(', ')}) — nothing was probed; fix the \`slug\` field and re-run.`
+            // VENDOR_ORDER covers eleven vendors now, so name none of them here.
+            : 'no supported ATS board found. If this company uses Workday, add a hint — '
+              + 'a full careers URL (workday: https://<tenant>.wd<N>.myworkdayjobs.com/<site>) or '
+              + 'workday: {tenant, site} — and re-run; discover-ats will confirm and add it.';
 
   /** @type {any} */
   const unresolved = { name: company.name, triedVendors, reason };
   if (skipped.length) unresolved.skippedUnsafeSlug = skipped;
+  // Well-formed URL on the right host, but the vendor's own slug contract
+  // rejects its shape — reported separately so it isn't read as a probe failure.
+  if (unsupported.length) unresolved.unsupportedSlugShape = unsupported;
   if (emptyBoards.length) unresolved.emptyBoards = emptyBoards;
   if (errors.length) unresolved.errors = errors;
   if (company.website) unresolved.website = company.website;
@@ -689,7 +766,8 @@ function runSelfTest() {
   check(b1.candidates.length === VENDOR_ORDER.length, 'buildCandidateUrls emits one candidate per vendor');
   check(b1.candidates[0].vendor === 'gh' && b1.candidates[0].careers_url === 'https://job-boards.greenhouse.io/adyen', 'buildCandidateUrls GH url');
   // The three highest-hit-rate vendors stay first: resolveCompany returns on the
-  // first match, so this ordering is what keeps the common case at three requests.
+  // first match, so this ordering is what caps a company they can resolve at
+  // three probes (one on gh, two on ashby, three on lever) rather than eleven.
   check(b1.candidates.slice(0, 3).map((c) => c.vendor).join(',') === 'gh,ashby,lever', 'buildCandidateUrls probes the common vendors first');
   const b2 = buildCandidateUrls({ name: 'X', slug: 'bad/slug' });
   check(b2.candidates.length === 0 && b2.skipped.length === VENDOR_ORDER.length, 'buildCandidateUrls SLUG_RE rejects unsafe slug (no URL built)');
@@ -719,6 +797,39 @@ function runSelfTest() {
   check(mixed.ashby === 'https://jobs.ashbyhq.com/DeepL', 'buildCandidateUrls preserves slug case for Ashby');
   check(mixed.recruitee === 'https://deepl.recruitee.com', 'buildCandidateUrls lowercases a subdomain host');
   check(bMixed.skipped.length === 0, 'a mixed-case slug is not skipped by the host assertion');
+
+  // Dotted slug. SLUG_RE allows dots (path vendors accept them), but a subdomain
+  // vendor turns `foo.bar` into `foo.bar.bamboohr.com` — two tenant labels, which
+  // every subdomain provider's `<tenant>.<vendor>` regex rejects. The host
+  // assertion can't catch it (expected is built by the same concatenation), so
+  // the provider-contract gate is what keeps it out of the probe loop.
+  const SUBDOMAIN_VENDORS = ['recruitee', 'breezy', 'bamboohr', 'pinpoint'];
+  const bDot = buildCandidateUrls({ name: 'X', slug: 'foo.bar' });
+  const dotCandidates = new Set(bDot.candidates.map((c) => c.vendor));
+  check(
+    SUBDOMAIN_VENDORS.every((v) => !dotCandidates.has(v) && bDot.unsupported.includes(v)),
+    'a dotted slug is unsupported for every subdomain vendor, never a candidate',
+  );
+  check(bDot.skipped.length === 0, 'a dotted slug is an unsupported shape, not an unsafe-slug skip');
+  check(
+    bDot.candidates.length > 0
+      && bDot.candidates.every((c) => !!VENDORS[c.vendor].provider.detect({ name: 'X', careers_url: c.careers_url })),
+    'a dotted slug still probes the vendors whose contract accepts it',
+  );
+  // The security property, asserted rather than argued: buildUrl always appends
+  // the vendor suffix, so no slug can move the host off the vendor's own domain.
+  // A dotted slug is a wasted-probe/reporting problem, not an SSRF one.
+  const SUBDOMAIN_SUFFIX = {
+    recruitee: '.recruitee.com', breezy: '.breezy.hr', bamboohr: '.bamboohr.com', pinpoint: '.pinpointhq.com',
+  };
+  let offDomain = 0;
+  for (const s of ['foo.bar', 'evil.com', 'a.b.c.d', '..evil.com', 'x.bamboohr.com', '169.254.169.254']) {
+    for (const c of buildCandidateUrls({ name: 'X', slug: s }, SUBDOMAIN_VENDORS).candidates) {
+      if (!new URL(c.careers_url).hostname.endsWith(SUBDOMAIN_SUFFIX[c.vendor])) offDomain += 1;
+    }
+  }
+  check(offDomain === 0, 'no slug can move a subdomain-vendor host off the vendor domain');
+
   const b3 = buildCandidateUrls({ name: 'Adyen' }, ['ashby']);
   check(b3.candidates.length === 1 && b3.candidates[0].vendor === 'ashby', 'buildCandidateUrls honors vendor subset');
 
@@ -917,7 +1028,7 @@ async function main() {
     // mid-write can't leave the user's portals.yml truncated.
     const tmpPath = `${PORTALS_PATH}.tmp-${process.pid}`;
     writeFileSync(tmpPath, insertIntoTrackedCompanies(current, snippets), 'utf-8');
-    renameSync(tmpPath, PORTALS_PATH);
+    renameSyncWithRetry(tmpPath, PORTALS_PATH);
     written = true;
   } else if (opts.write && fresh.length && !existsSync(PORTALS_PATH)) {
     warnings.push(`--write given but portals.yml not found at ${PORTALS_PATH} — printing entries instead`);
@@ -950,7 +1061,7 @@ async function main() {
 }
 
 // --- Run (CLI only; guarded so the module is safely importable for tests) ---
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta.url)) {
   main().catch((err) => {
     console.error(`discover-ats: ${err?.stack || err?.message || err}`);
     process.exit(1);
