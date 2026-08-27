@@ -127,6 +127,13 @@ if (process.argv.includes('--self-test')) {
   // renamed, an assertion on 'config/local-paths.txt' would keep passing while
   // the real file went back to being an orphan in a fork's CI.
   assert(covered(LOCAL_PATHS_FILE) === true, 'the local-paths declaration file must be covered when a fork commits it (excluded, #2991)');
+  // The example is asserted through its MECHANISM, not just through covered().
+  // covered() answers true for any of them, EXCLUDES included, so a single
+  // covered() assertion would keep passing if the example were ever folded into
+  // the exclude above; it would then stop shipping, silently, which is the one
+  // failure this pair of assertions exists to catch.
+  assert(!EXCLUDES.includes('config/local-paths.example.txt'), 'the shipped example must NOT ride the exclude: it has to keep reaching installs');
+  assert(SYSTEM_PATHS.includes('config/local-paths.example.txt'), 'the shipped example must stay in SYSTEM_PATHS (#2991)');
   assert(covered('config/local-paths.example.txt') === true, 'the shipped example must stay covered by SYSTEM_PATHS, not by the exclude');
 
   // Test exact matches in SYSTEM_PATHS / USER_PATHS
