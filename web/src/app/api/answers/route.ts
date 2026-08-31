@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { careerOpsRoot, rootScript, findReportFile, readMemory } from "@/lib/career-ops";
-import { buildAnswerPrompt, extractJsonObject, runPlanner, toAnswers, type PlannerField } from "@/lib/apply/planner";
+import { resolveCli } from "@/lib/clis";
+import { buildAnswerPrompt } from "@/lib/apply/answer-prompt.mjs";
+import { runPlanner, toAnswers, type PlannerField } from "@/lib/apply/planner";
+import { extractJsonObject } from "@/lib/extract-json-object.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -160,6 +163,9 @@ export async function POST(req: Request) {
 
   const cliId = String(body.cliId ?? "").trim();
   if (!cliId) return Response.json({ error: "no CLI selected to draft with" }, { status: 400 });
+  const resolved = resolveCli(cliId);
+  if (!resolved) return Response.json({ error: `CLI '${cliId}' not found on this machine` }, { status: 400 });
+  const { spec, binPath } = resolved;
 
   // Only draft what is still blank, so an answer the user wrote or edited is never
   // silently overwritten by a regenerated one.
@@ -180,8 +186,8 @@ export async function POST(req: Request) {
   }));
 
   const prompt = buildAnswerPrompt({ title, fields, memory: readMemory() });
-  const run = await runPlanner({ cliId, prompt, fieldCount: fields.length });
-  if (run.error && !run.buf) return Response.json({ error: run.error }, { status: 500 });
+  const t0 = Date.now();
+  const run = await runPlanner({ cliId, spec, binPath, prompt, fieldCount: fields.length, cwd: careerOpsRoot(), t0, log: () => {} });
   if (!run.buf.trim()) {
     return Response.json(
       { error: run.signal ? "the planner was killed before answering" : "the planner produced no output" },

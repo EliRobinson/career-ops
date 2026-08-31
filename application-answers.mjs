@@ -412,13 +412,19 @@ export function parseApplicationAnswersSection(reportText) {
  * The italic parenthetical the mode emits under the heading is skipped: it is a
  * note to the reader, not a question.
  *
+ * Absence and unreadability are different answers to different questions: no
+ * Block H returns `null`, while a Block H whose body does not follow the
+ * bold-question convention returns an empty `freeText`. A caller has to be able
+ * to tell "nothing was drafted" from "something was drafted and I could not
+ * read it" — collapsing both to `null` hides the second one.
+ *
  * @param {string} reportText
- * @returns {{present: boolean, freeText: Array<{question: string, answer: string}>}}
+ * @returns {{present: true, freeText: Array<{question: string, answer: string}>} | null}
  */
 export function parseDraftAnswersBlockH(reportText) {
   const report = String(reportText ?? '').replace(/\r\n/g, '\n');
   const heading = /^##\s+H\)\s*Draft Application Answers\s*$/m.exec(report);
-  if (!heading) return { present: false, freeText: [] };
+  if (!heading) return null;
 
   const afterHeading = heading.index + heading[0].length;
   const next = /^## .+$/m.exec(report.slice(afterHeading));
@@ -447,6 +453,7 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') args.help = true;
     else if (arg === '--read') args.read = true;
+    else if (arg === '--read-draft') args.readDraft = true;
     else if (arg === '--strict') args.strict = true;
     else if (arg.startsWith('--')) {
       const value = argv[i + 1];
@@ -464,11 +471,16 @@ function usage() {
   return [
     'Usage: node application-answers.mjs --report <report.md> --input <answers.json> [--state filled|submitted] [--date YYYY-MM-DD]',
     '       node application-answers.mjs --report <report.md> --read [--strict]',
+    '       node application-answers.mjs --report <report.md> --read-draft',
     '',
     'The input JSON may contain: freeText, selections, fieldValues, files, date, state.',
     '--read prints the parsed ## Application Answers snapshot as JSON (null when the section is absent).',
     '--strict makes --read refuse a partially unreadable section, naming every line it could not parse,',
     'instead of skipping it. Recovery callers (modes/apply.md) want the refusal; the default stays total.',
+    '--read-draft prints the evaluation mode\'s ## H) Draft Application Answers block instead, as a partial',
+    'snapshot ({"freeText": [...]}), or null when the report has no Block H. Best-effort by construction:',
+    'modes/oferta.md fixes the heading and not the body, so an empty freeText means "drafted, unreadable",',
+    'which is why --strict does not apply to it.',
   ].join('\n');
 }
 
@@ -488,6 +500,29 @@ async function main() {
   if (args.strict && !args.read) {
     console.error(`--strict only applies to --read.\n\n${usage()}`);
     process.exitCode = 1;
+    return;
+  }
+  if (args.read && args.readDraft) {
+    console.error(`--read and --read-draft print different sections; pass one.\n\n${usage()}`);
+    process.exitCode = 1;
+    return;
+  }
+  if (args.readDraft) {
+    if (args.input || args.state || args.date) {
+      console.error(`--read-draft is read-only and takes no --input, --state or --date.\n\n${usage()}`);
+      process.exitCode = 1;
+      return;
+    }
+    if (!args.report) {
+      console.error(usage());
+      process.exitCode = 1;
+      return;
+    }
+    // No strict counterpart on purpose. Block H's body is a convention, not a
+    // format this module writes, so "I could not read a line" is an expected
+    // outcome rather than a corrupted report worth refusing over.
+    const reportText = readFileSync(resolve(args.report), 'utf-8');
+    console.log(JSON.stringify(parseDraftAnswersBlockH(reportText), null, 2));
     return;
   }
   if (args.read) {

@@ -13,6 +13,7 @@ import { GeneratePdfButton } from "@/components/generate-pdf-button";
 import { ApplyButton } from "@/components/apply-button";
 import { DeleteFromTracker } from "@/components/delete-from-tracker";
 import { ApplicationQuestions } from "@/components/answers/application-questions";
+import { companyPresentation } from "@/lib/company-presentation.mjs";
 
 // Progressive disclosure of the report. The core writes prose blocks
 // "## F) Verdict (lead)", "## A) Role Summary", "## B) Match with CV", then
@@ -71,6 +72,7 @@ export function ReportView({
   // Recorded by linkedin-apply.mjs once resolved, so the Apply button can skip
   // resolution on every later visit.
   const applyUrl = field("Apply URL");
+  const company = app ? companyPresentation(app) : null;
 
   return (
     <div className="mx-auto max-w-8xl px-6 py-8">
@@ -84,9 +86,9 @@ export function ReportView({
       <header className="mt-5">
         <p className="font-mono text-xs uppercase tracking-[0.18em] text-faint">#{id}</p>
         <div className="mt-2 flex items-center gap-3">
-          <CompanyLogo name={app?.company ?? meta?.title ?? `Report #${id}`} size={40} />
+          <CompanyLogo name={company?.logoName ?? meta?.title ?? `Report #${id}`} size={40} />
           <h1 className="font-display text-3xl tracking-tight text-landing">
-            {app?.company ?? meta?.title ?? `Report #${id}`}
+            {company?.label ?? meta?.title ?? `Report #${id}`}
           </h1>
         </div>
         {app?.role && <p className="mt-1 text-muted">{app.role}</p>}

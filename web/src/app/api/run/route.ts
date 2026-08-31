@@ -8,7 +8,7 @@ import path from "node:path";
 import { resolveCli } from "@/lib/clis";
 import { accumulateTokens, hasNewCompletedReport, isFatalGenericStderr, timeoutMessage } from "@/lib/run-cli-support.mjs";
 import { spawnHeadlessCli } from "@/lib/spawn-cli.mjs";
-import { careerOpsRoot, readMemory, findReportFile, readInbox, readScanDates } from "@/lib/career-ops";
+import { careerOpsRoot, readMemory, findReportFile, readInbox, readScanDates, readLanguageConfig } from "@/lib/career-ops";
 import { resolvePdfPaths, type PdfPaths } from "@/lib/pdf-paths.mjs";
 import { renderAndMarkPdf, writeCvHtml, pdfRunOutcome } from "@/lib/pdf-render.mjs";
 import { evaluateRunOutcome } from "@/lib/run-outcome.mjs";
@@ -166,9 +166,22 @@ export async function POST(req: Request) {
 
   // These run the REAL core (modes/scripts), not just data — fail clearly if the
   // root is incomplete instead of faking it.
-  if (k.script && !fs.existsSync(path.join(careerOpsRoot(), k.script))) {
-    return reject(`This needs a complete career-ops checkout (${k.script}). CAREER_OPS_ROOT has data only. Point it at a full checkout.`);
+  // The precondition must check the file the prompt will actually read. Pinning
+  // it to modes/oferta.md meant a configured market passed a check on a file the
+  // run never opens, and would have missed a market dir with no evaluation mode.
+  const lang = readLanguageConfig();
+  const needsScript: Record<string, string> = { evaluate: lang.evalModeFile, "fix-portal": "verify-portals.mjs", pdf: "generate-pdf.mjs" };
+  const required = needsScript[kind];
+  // CAREER_OPS_ROOT is runtime user data, not a build input. Tracing this
+  // dynamic path would copy the whole web project into every server bundle.
+  const requiredPath = required
+    ? path.join(/* turbopackIgnore: true */ careerOpsRoot(), required)
+    : "";
+  if (required && !fs.existsSync(/* turbopackIgnore: true */ requiredPath)) {
+    return reject(`This needs a complete career-ops checkout (${required}). CAREER_OPS_ROOT has data only — point it at a full checkout.`);
   }
+  // fix-portal's own shell-safety gate runs below via k.prepare (prepareFixPortal);
+  // no need to duplicate it here.
 
   // An A–F score is meaningless without a CV to score against — the CLI would
   // hallucinate a fit narrative and still emit a VERDICT. Require cv.md first.
@@ -198,7 +211,7 @@ export async function POST(req: Request) {
       : undefined;
   // prepare() only returns an input when it rewrote one (evaluate); every other
   // kind sends what the client typed, untouched.
-  const prompt = buildPrompt({ kind, input: prepared.input ?? input, memory: readMemory(), today, fetchUrl, postedAt });
+  const prompt = buildPrompt({ kind, input: prepared.input ?? input, memory: readMemory(), today, fetchUrl, postedAt, lang });
 
   const isClaude = cliId === "claude";
   // Which tools each kind gets, and the whole claude argv, live in
@@ -277,6 +290,9 @@ export async function POST(req: Request) {
     start(controller) {
       let buf = "";
       let emittedText = false; // any assistant text delta → the CLI actually ran
+      // Set ONLY by an authoritative structured-stream signal (the ev.error branch
+      // in processParsedLine below) — never by flagStderrLine. A stderr keyword
+      // match is a guess, not a verdict; see stderrErrorSnippet.
       let sawError = false;
       let stderrBuf = "";
       // Fallback for a CLI with no CliSpec.stderrIsFatal of its own. Moved into
@@ -285,10 +301,18 @@ export async function POST(req: Request) {
       // is how a bare `auth` came to match "Authentication successful" and mark a
       // successful run as failed on six of the eight runtimes (#1974).
       const isFatalStderr = spec.stderrIsFatal ?? isFatalGenericStderr;
+      // Snippet only, never fatality. isFatalStderr is a keyword guess over a
+      // CLI's own stderr chatter, not a verdict — trusting it to fail the run
+      // outright is exactly the bug #1974 reported: "Authentication successful"
+      // matched a bare `auth` and marked a clean, successful run as an error, on
+      // six of the eight runtimes. The close handler below is the sole place that
+      // decides fatality, from cleanExit and the CLI's own structured error event
+      // (authoritative — see the ev.error branch in processParsedLine); this only
+      // captures human-readable detail for whichever message that decision needs.
+      let stderrErrorSnippet: string | null = null;
       const flagStderrLine = (line: string) => {
-        if (!line.trim() || !isFatalStderr(line)) return;
-        sawError = true;
-        send({ type: "error", msg: line.trim().slice(0, 200) });
+        if (stderrErrorSnippet || !line.trim() || !isFatalStderr(line)) return;
+        stderrErrorSnippet = line.trim().slice(0, 200);
       };
       let lastTokens = 0; // per-run token cost from the CLI's structured usage event (#6) — local only
       let lastCostUsd: number | null = null;
@@ -409,9 +433,9 @@ export async function POST(req: Request) {
       child.stderr.on("data", (chunk: string) => {
         // Match on COMPLETE lines. A chunk boundary can fall mid-word, so testing a
         // raw chunk both misses an error split across two of them and can match a
-        // fragment that is not the word it looks like. sawError feeds pdfRunOutcome,
-        // where a false positive fails a run whose PDF rendered fine, so the
-        // boundary has to be settled before the regex sees it.
+        // fragment that is not the word it looks like. The captured snippet only
+        // supplies message text for whichever failure the close handler already
+        // decided on — it never sets sawError itself (see flagStderrLine above).
         stderrBuf += chunk;
         let nl;
         while ((nl = stderrBuf.indexOf("\n")) !== -1) {
@@ -498,8 +522,11 @@ export async function POST(req: Request) {
         // all is the same failure mode whether it was evaluating or tailoring
         // a PDF — one place for the condition/message pair instead of two.
         const noOutputError = (): string | null => {
-          if (!emittedText && !sawError && !cleanExit) return "The CLI exited with an error. Is it installed and authenticated?";
-          if (!emittedText && !sawError) return "The CLI produced no output. Is it installed and authenticated? (career-ops is best on Claude Code.)";
+          if (!emittedText && !sawError && !cleanExit) {
+            const detail = stderrErrorSnippet ? ` (${stderrErrorSnippet})` : "";
+            return `The CLI exited with an error — is it installed and authenticated?${detail}`;
+          }
+          if (!emittedText && !sawError) return "The CLI produced no output — is it installed and authenticated? (career-ops is best on Claude Code.)";
           return null;
         };
 
@@ -552,6 +579,7 @@ export async function POST(req: Request) {
           wroteReport,
           cleanExit,
           sawError,
+          stderrErrorSnippet,
         });
         if (!outcome.ok) {
           send({ type: "error", msg: outcome.message });

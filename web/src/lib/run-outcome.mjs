@@ -29,6 +29,12 @@
  * @property {boolean} wroteReport - reports/ actually gained a file during the run.
  * @property {boolean} cleanExit - Exit code 0 (not killed, not non-zero, not a signal).
  * @property {boolean} sawError - Anything error-shaped on stderr.
+ * @property {string|null} [stderrErrorSnippet] - The first stderr line the
+ *   heuristic classifier flagged as error-shaped, if any. Appended to arm 4's
+ *   message ONLY when sawError is false: sawError true means an authoritative
+ *   structured error already sent its own message above, so this snippet would
+ *   just repeat it; a bare non-clean exit with no structured error is where the
+ *   raw stderr line is the only clue the user gets.
  */
 
 /**
@@ -61,7 +67,7 @@
  * @param {EvaluateRunSignals} signals
  * @returns {{ok: true} | {ok: false, message: string}}
  */
-export function evaluateRunOutcome({ noOutputMessage, persists, wroteReport, cleanExit, sawError }) {
+export function evaluateRunOutcome({ noOutputMessage, persists, wroteReport, cleanExit, sawError, stderrErrorSnippet = null }) {
   // A CLI that produced nothing at all is a different failure from one that ran
   // and fell short — usually "not installed" or "not authenticated".
   if (noOutputMessage) return { ok: false, message: noOutputMessage };
@@ -85,9 +91,10 @@ export function evaluateRunOutcome({ noOutputMessage, persists, wroteReport, cle
   if (!cleanExit || sawError) {
     // Produced output but did NOT finish cleanly — flag it instead of recording a
     // confident score off a half-finished run.
+    const detail = !sawError && stderrErrorSnippet ? ` (${stderrErrorSnippet})` : "";
     return {
       ok: false,
-      message: "This run hit an error before finishing, so it isn't recorded as a confident result. Re-run it to verify.",
+      message: `This run hit an error before finishing, so it isn't recorded as a confident result. Re-run it to verify.${detail}`.slice(0, 200),
     };
   }
 

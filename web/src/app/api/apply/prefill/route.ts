@@ -2,7 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { careerOpsRoot, readMemory } from "@/lib/career-ops";
 import { getSession } from "@/lib/apply/session";
-import { buildAnswerPrompt, extractJsonObject, runPlanner, type PlannerField } from "@/lib/apply/planner";
+import { resolveCli } from "@/lib/clis";
+import { buildAnswerPrompt } from "@/lib/apply/answer-prompt.mjs";
+import { runPlanner } from "@/lib/apply/planner";
+import { extractJsonObject } from "@/lib/extract-json-object.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,10 +17,11 @@ export const maxDuration = 320;
 // step so a stuck or empty prefill is observable on the page AND written to
 // <root>/.career-ops-web/apply-prefill.log for debugging.
 //
-// The prompt, the spawn and the truncation-tolerant JSON parse now live in
-// lib/apply/planner.ts, shared with /api/answers (#8), so a question typed into
-// the job page is drafted under exactly the same grounding and sensitive-field
-// rules as one scraped off a live form.
+// The prompt (lib/apply/answer-prompt.mjs), the spawn (lib/apply/planner.ts) and
+// the truncation-tolerant JSON parse (lib/extract-json-object.mjs) are shared
+// with /api/answers (#8), so a question typed into the job page is drafted
+// under exactly the same grounding and sensitive-field rules as one scraped
+// off a live form.
 
 export async function POST(req: Request) {
   let body: { sessionId?: string; cliId?: string };
@@ -68,19 +72,26 @@ export async function POST(req: Request) {
       const s = sessionId ? getSession(sessionId) : undefined;
       if (!s) return fail("apply session not found (it may have expired)");
       if (!cliId) return fail("no CLI selected");
+      const resolved = resolveCli(cliId);
+      if (!resolved) return fail(`CLI '${cliId}' not found on this machine`);
+      const { spec, binPath } = resolved;
 
-      const fields: PlannerField[] = s.fields.map((f) => ({
-        id: f.id,
-        type: f.type,
-        label: f.label,
-        required: f.required,
-        options: f.options,
-      }));
-      const prompt = buildAnswerPrompt({ title: s.title, fields, memory: readMemory() });
-      log(`Form: "${s.title}" · ${fields.length} fields · prompt ${prompt.length} chars`);
+      const mem = readMemory().trim();
+      const prompt = buildAnswerPrompt({ title: s.title, fields: s.fields, memory: mem });
 
-      const result = await runPlanner({ cliId, prompt, fieldCount: fields.length, onLog: log });
-      if (result.error && !result.buf) return fail(result.error);
+      log(`Form: "${s.title}" · ${s.fields.length} fields · prompt ${prompt.length} chars · memory ${mem.length} chars`);
+      log(`Planner: ${cliId} (${binPath})`);
+
+      const result = await runPlanner({
+        cliId,
+        spec,
+        binPath,
+        prompt,
+        fieldCount: s.fields.length,
+        cwd: careerOpsRoot(),
+        t0,
+        log,
+      });
 
       log(`Planner exited code=${result.code} signal=${result.signal} · ${result.buf.length} chars total`);
       log(`output head: ${result.buf.slice(0, 100).replace(/\s+/g, " ") || "(empty)"}`);
