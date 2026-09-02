@@ -19,7 +19,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildSavePayload, resolveState } from "../../src/lib/apply/answers-snapshot.mjs";
+import { buildSavePayload, mayReplaceSection, resolveState } from "../../src/lib/apply/answers-snapshot.mjs";
 
 const STORED = {
   state: "submitted",
@@ -86,4 +86,44 @@ test("maxWords is a UI concern and never reaches the report", () => {
 test("a missing answer is written as an empty string, not undefined", () => {
   const payload = buildSavePayload({ questions: [{ question: "Why us?" }] });
   assert.equal(payload.freeText[0].answer, "");
+});
+
+// mayReplaceSection guards the one path that got past everything above.
+//
+// buildSavePayload can only carry across what the reader handed it. When the
+// reader was unavailable - an older application-answers.mjs that can still be
+// written to but exports no parseApplicationAnswersSection, which the route
+// treats as a normal expected state - it hands back empty lists that look
+// exactly like a genuinely empty section. Writing those deletes the selections,
+// the field values and the uploaded CV, and drops a submitted section back to
+// filled. The same loss, arriving through the door that skipped the lock.
+
+test("a section that was read is safe to replace", () => {
+  assert.equal(mayReplaceSection({ readable: true, present: true }), true);
+});
+
+test("a report with no section yet is safe to write for the first time", () => {
+  // Nothing to destroy, so an unavailable reader must not block the first save.
+  assert.equal(mayReplaceSection({ readable: false, present: false }), true);
+  assert.equal(mayReplaceSection({ readable: true, present: false }), true);
+});
+
+test("a section that exists and was NOT read must not be replaced", () => {
+  assert.equal(
+    mayReplaceSection({ readable: false, present: true }),
+    false,
+    "saving here would write empty selections, field values and files over real ones",
+  );
+});
+
+test("only a literal true counts as readable", () => {
+  // The route builds this object by hand. A missing or truthy-ish flag must fail
+  // closed, the same way needs_confirmation is tested strictly elsewhere.
+  for (const sloppy of [undefined, null, 1, "true", {}]) {
+    assert.equal(
+      mayReplaceSection({ readable: sloppy, present: true }),
+      false,
+      `readable: ${JSON.stringify(sloppy)} must not be read as "we know what is there"`,
+    );
+  }
 });

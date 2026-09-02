@@ -9,7 +9,7 @@ import { careerOpsRoot, rootScript, findReportFile, readMemory } from "@/lib/car
 import { buildAnswerPrompt } from "@/lib/apply/answer-prompt.mjs";
 import { runPlanner, type PlannerField } from "@/lib/apply/planner";
 import { toAnswers } from "@/lib/apply/planner-answers.mjs";
-import { buildSavePayload } from "@/lib/apply/answers-snapshot.mjs";
+import { buildSavePayload, mayReplaceSection } from "@/lib/apply/answers-snapshot.mjs";
 import { sanitizeQuestions, wordCapFrom, type Question } from "@/lib/apply/questions.mjs";
 import { isSensitiveQuestion } from "@/lib/apply/sensitive-questions.mjs";
 import { extractJsonObject } from "@/lib/extract-json-object.mjs";
@@ -35,7 +35,14 @@ export const maxDuration = 320;
 // the web UI wrote (modes/apply.md step 4 already says to reuse it).
 
 type Stored = {
+  /** A `## Application Answers` section exists on this report. */
   present: boolean;
+  /**
+   * We know what that section holds. False means the core reader was
+   * unavailable or threw, so `rest` below is empty because nothing was read, not
+   * because nothing is there. Saving over that would delete it.
+   */
+  readable: boolean;
   date: string;
   state: string;
   freeText: Question[];
@@ -45,6 +52,15 @@ type Stored = {
 };
 
 const EMPTY_REST = { selections: [], fieldValues: [], files: [] };
+
+/**
+ * The section heading, matched here rather than through the core module.
+ *
+ * The whole point of this check is to work when the core reader does not, so it
+ * cannot go through it. One anchored line, the same one
+ * `parseApplicationAnswersSection` looks for.
+ */
+const SECTION_HEADING = /^## Application Answers\s*$/m;
 
 /**
  * Load application-answers.mjs out of the user's career-ops checkout.
@@ -68,11 +84,28 @@ function asQuestions(raw: unknown): Question[] {
 
 /** Read the stored section through the core parser, the module that owns the format. */
 async function readStored(file: string): Promise<Stored> {
-  const empty: Stored = { present: false, date: "", state: "", freeText: [], rest: EMPTY_REST };
-  const mod = await loadCore();
-  if (!mod?.parseApplicationAnswersSection) return empty;
+  const blank = { present: false, date: "", state: "", freeText: [], rest: EMPTY_REST };
+
+  let text: string;
   try {
-    const text = fs.readFileSync(file, "utf8");
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    // The report cannot be opened at all, so whether it holds a section is
+    // unknowable. Assume it does: a refused save is recoverable, a replaced
+    // section is not.
+    return { ...blank, readable: false, present: true };
+  }
+
+  const mod = await loadCore();
+  // An older application-answers.mjs in the user's checkout can still be written
+  // to while exporting no reader. That is a normal, expected state (this route
+  // handles the same skew for parseDraftAnswersBlockH below), and it is exactly
+  // the state in which a save must not replace what it could not read.
+  if (!mod?.parseApplicationAnswersSection) {
+    return { ...blank, readable: false, present: SECTION_HEADING.test(text) };
+  }
+
+  try {
     // Lenient on purpose. The strict reader exists for modes/apply.md, which is
     // about to send a real application and should refuse a section it cannot
     // fully read. Here the user is looking at an editable page, so a section
@@ -81,6 +114,7 @@ async function readStored(file: string): Promise<Stored> {
     if (parsed) {
       return {
         present: true,
+        readable: true,
         date: String(parsed.date ?? ""),
         state: String(parsed.state ?? ""),
         freeText: asQuestions(parsed.freeText),
@@ -104,11 +138,13 @@ async function readStored(file: string): Promise<Stored> {
     const draft = mod.parseDraftAnswersBlockH?.(text) as null | { freeText?: unknown };
     const seeded = asQuestions(draft?.freeText);
     if (seeded.length > 0) {
-      return { present: false, date: "", state: "", freeText: seeded, source: "block-h", rest: EMPTY_REST };
+      return { ...blank, readable: true, freeText: seeded, source: "block-h" };
     }
-    return empty;
+    // Read cleanly, and there is genuinely no section yet. The first save creates
+    // one, which destroys nothing.
+    return { ...blank, readable: true };
   } catch {
-    return empty;
+    return { ...blank, readable: false, present: SECTION_HEADING.test(text) };
   }
 }
 
@@ -153,7 +189,7 @@ export async function GET(req: Request) {
   // findReportFile enforces containment under the project root.
   const file = findReportFile(n);
   if (!file) return Response.json({ error: `no report found for #${n}` }, { status: 404 });
-  const { rest: _rest, ...stored } = await readStored(file);
+  const { rest: _rest, readable: _readable, ...stored } = await readStored(file);
   return Response.json(stored);
 }
 
@@ -181,6 +217,15 @@ export async function POST(req: Request) {
   if (questions.length === 0) return Response.json({ error: "add at least one question" }, { status: 400 });
 
   const stored = await readStored(file);
+  if (!mayReplaceSection(stored)) {
+    return Response.json(
+      {
+        error:
+          "this report already has an Application Answers section that could not be read, and saving replaces the whole section. Update application-answers.mjs in your career-ops checkout, then try again.",
+      },
+      { status: 409 },
+    );
+  }
   const save = (qs: Question[]) =>
     writeStored(file, buildSavePayload({ stored: { state: stored.state, ...stored.rest }, questions: qs, state: body.state }));
 
@@ -202,7 +247,12 @@ export async function POST(req: Request) {
   // of its reply. The planner is told to refuse them, but a refusal it declines
   // to make comes back as a confident invented answer about the candidate's visa
   // status or pay, so the safest generated value is the one never generated.
-  const todo = blank.filter((q) => !isSensitiveQuestion(q.question));
+  // Each question carries the planner field id it was given, rather than the id
+  // being rebuilt from a list position forty lines further down. The old form,
+  // `todo.indexOf(q)`, worked only while `filter` kept the same object
+  // references: insert one `.map()` between here and the merge and it returns -1
+  // for every question, every draft is silently discarded, and nothing errors.
+  const todo = blank.filter((q) => !isSensitiveQuestion(q.question)).map((q, i) => ({ q, id: `q${i}` }));
   if (todo.length === 0) {
     const saved = await save(questions);
     if (!saved.ok) return Response.json({ error: `could not save: ${saved.error}` }, { status: 500 });
@@ -218,13 +268,18 @@ export async function POST(req: Request) {
   }
 
   const title = path.basename(file).replace(/^\d+-/, "").replace(/-\d{4}-\d{2}-\d{2}\.md$/, "").replace(/-/g, " ");
-  // The stated word cap rides in the question text, which is the label the
-  // planner reads, so there is nothing extra to pass it here.
-  const fields: PlannerField[] = todo.map((q, i) => ({
-    id: `q${i}`,
+  // The cap is stated inside the question text, but stating it again as its own
+  // field is what the planner acts on: buildAnswerPrompt renders it as
+  // `[max N words]` and tells the planner to respect it. Parsing the cap for the
+  // panel's counter and then not passing it here is how a question saying "in 50
+  // words or fewer" came back at the flat ~120-word default, over the employer's
+  // limit, with nothing but a red counter to show for it.
+  const fields: PlannerField[] = todo.map(({ q, id }) => ({
+    id,
     type: "textarea",
     label: q.question,
     required: false,
+    maxWords: wordCapFrom(q.question),
   }));
 
   const t0 = Date.now();
@@ -260,22 +315,28 @@ export async function POST(req: Request) {
   if (!obj) return Response.json({ error: "could not read the planner's answer" }, { status: 500 });
   const answers = toAnswers(obj);
 
-  let drafted = 0;
-  const merged = questions.map((q) => {
-    if (q.answer.trim()) return q;
+  // Collect first, merge second. A `.map()` that also increments an outer counter
+  // reads as a transformation while being a loop with a side effect, and the two
+  // halves drift the moment either is edited.
+  const drafts = new Map<Question, string>();
+  for (const { q, id } of todo) {
     // Said twice on purpose. `todo` already excluded these, so no value for one
     // can exist; this line is what keeps that true after a later edit changes how
     // `todo` is built. A guarantee stated only as a side effect of a filter three
     // screens up is one edit away from being gone.
-    if (isSensitiveQuestion(q.question)) return q;
-    const idx = todo.indexOf(q);
-    const answer = idx === -1 ? undefined : answers[`q${idx}`];
+    if (isSensitiveQuestion(q.question)) continue;
+    const answer = answers[id];
     // needs_confirmation is the planner's own refusal flag. It is a second signal
     // rather than the guarantee: the guarantee is the predicate above.
-    if (!answer || answer.needs_confirmation || !answer.value.trim()) return q;
-    drafted += 1;
-    return { ...q, answer: answer.value };
+    if (!answer || answer.needs_confirmation || !answer.value.trim()) continue;
+    drafts.set(q, answer.value);
+  }
+
+  const merged = questions.map((q) => {
+    const draft = drafts.get(q);
+    return draft === undefined ? q : { ...q, answer: draft };
   });
+  const drafted = drafts.size;
 
   const saved = await save(merged);
   if (!saved.ok) return Response.json({ error: `drafted, but could not save: ${saved.error}` }, { status: 500 });
