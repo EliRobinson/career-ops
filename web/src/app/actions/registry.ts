@@ -33,8 +33,9 @@ export type StartJobInput = {
   batchId?: string;
 };
 
-// Same shape job-store.tsx's startEvaluate takes — a raw URL in, a canonical
-// postingKey out as the job's `input`. See its header for why this exists.
+// Same shape job-store.tsx's startEvaluate takes — a raw URL in, normalizeJobUrl's
+// canonical url out as the job's `input`. See its header for why this exists, and
+// job-url.mjs's for why that canonical url is not the same thing as postingKey.
 export type StartEvaluateInput = {
   url: string;
   title?: string;

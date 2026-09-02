@@ -11,9 +11,28 @@
  * endpoint returns the real posting body with no auth, so we fetch that and keep the
  * clickable link for the tracker.
  *
+ * TWO DIFFERENT JOBS, DELIBERATELY NOT THE SAME FUNCTION:
+ *   normalizeJobUrl  cleans a URL for the RECORD — the report header, the tracker
+ *                    row, data/pipeline.md. The output is a link a human clicks,
+ *                    so it keeps its own shape (trailing slash, param order, case).
+ *   postingKey       answers "are these the same posting?" and delegates that to
+ *                    core/url-key.mjs's normalizeUrl, the repo's one identity key
+ *                    (parity-tested against the root url-key.mjs). This module
+ *                    must never grow a second key: explore-ai.ts's canon() and
+ *                    scan-history dedup both key with normalizeUrl, and a rival
+ *                    key here would make the same posting look "new" on one
+ *                    surface and "in your pipeline" on the next.
+ *
+ * LinkedIn URL parsing is a mirror of the core's liveness-api.mjs rung and lives
+ * in core/linkedin-url.mjs — see that file's header for why a copy exists and
+ * when to delete it.
+ *
  * Plain .mjs, dependency-free (same pattern as pdf-paths.mjs / cv-envelope.mjs) so
  * test-all.mjs can import it under bare Node and its sibling suite is auto-gated.
  */
+
+import { linkedInJobId, linkedInGuestUrl, linkedInCanonicalUrl } from "./core/linkedin-url.mjs";
+import { normalizeUrl } from "./core/url-key.mjs";
 
 /**
  * @typedef {Object} NormalizedJobUrl
@@ -31,8 +50,11 @@
 
 /** @typedef {"greenhouse"|"lever"|"ashby"|"workday"} AtsSource */
 
-// Share-sheet and campaign noise. Dropped so the same posting pasted from an email
-// and from the address bar dedupes to one entry, and so the recorded URL stays clean.
+// Share-sheet and campaign noise, dropped so the RECORDED url stays clean — this is
+// not, and must not become, an identity key. url-key.mjs's normalizeUrl owns that
+// (and carries its own core-parity denylist); postingKey below routes through it.
+// The extra LinkedIn-flavored entries here are the ones a share sheet actually
+// appends, and they matter for what the user ends up clicking in the tracker.
 const TRACKING_PARAMS = [/^utm_/i, /^trk$/i, /^trkInfo$/i, /^refId$/i, /^trackingId$/i, /^originalSubdomain$/i, /^lipi$/i, /^eBP$/i];
 
 /**
@@ -140,27 +162,6 @@ const TRAILING_PUNCTUATION = ".,;!?";
 const MAX_URL_LENGTH = 2048;
 
 /**
- * The numeric LinkedIn job id, or null when this URL is not one posting.
- * Matched as digits only, so nothing user-supplied is ever spliced into a hostname.
- * @param {URL} u
- * @returns {string|null}
- */
-function linkedInJobId(u) {
-  const seg = u.pathname.match(/\/jobs\/view\/([^/]+)/i);
-  if (seg) {
-    if (/^\d+$/.test(seg[1])) return seg[1];
-    // "senior-ai-engineer-at-acme-4434693435" — the id is the trailing number.
-    // 6+ digits so a title ending in "-2" cannot be read as a job id.
-    const tail = seg[1].match(/-(\d{6,})$/);
-    if (tail) return tail[1];
-  }
-  // Collections and search views carry the id only in the query string.
-  const cur = u.searchParams.get("currentJobId");
-  if (cur && /^\d+$/.test(cur)) return cur;
-  return null;
-}
-
-/**
  * @param {string} raw
  * @returns {NormalizedJobUrl|JobUrlError}
  */
@@ -199,12 +200,7 @@ export function normalizeJobUrl(raw) {
         error: "That LinkedIn link does not point at a single job posting. Open the job, then copy the URL from the address bar.",
       };
     }
-    return {
-      ok: true,
-      kind: "linkedin",
-      url: `https://www.linkedin.com/jobs/view/${id}/`,
-      fetchUrl: `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${id}`,
-    };
+    return { ok: true, kind: "linkedin", url: linkedInCanonicalUrl(id), fetchUrl: linkedInGuestUrl(id) };
   }
 
   const clean = u.toString();
@@ -270,15 +266,34 @@ export function companyFromJobUrl(url) {
 
 /**
  * Canonical identity key for a pasted URL: the thing several UI surfaces (inbox,
- * tracker, dedup) can compare to decide whether two pasted strings point at the
- * same posting. Must never throw and never return undefined so a caller can
- * always use the result as a Map/Set key or React list key with no null check.
+ * tracker, dedup) compare to decide whether two strings point at the same posting.
+ *
+ * TWO STAGES, and the order is the whole point:
+ *   1. normalizeJobUrl collapses LinkedIn's several spellings of one posting
+ *      (/jobs/view/{id}, /jobs/view/{slug}-{id}, ?currentJobId={id}) onto one
+ *      canonical link. normalizeUrl cannot do this: it is host-agnostic by
+ *      design, so those three shapes key three different ways to it.
+ *   2. normalizeUrl then produces the actual key. It is the ONE identity key in
+ *      this repo (parity-tested against the root url-key.mjs, and already what
+ *      explore-ai.ts's canon() and scan-history dedup use), so a card that reads
+ *      "in your pipeline" here means the same thing it means on Explore.
+ *
+ * Must never throw and never return undefined, so a caller can use the result as
+ * a Map/Set key or a React list key with no null check.
+ *
+ * NOT '' FOR AN UNPARSEABLE INPUT, unlike normalizeUrl. '' is normalizeUrl's NO
+ * KEY sentinel, and its own header is explicit that callers must never let two
+ * ''s match, which is exactly what a Set membership test does. Handing back the
+ * raw string instead keeps two different unparseable inputs distinct, the safe
+ * answer for the comparison this function exists to serve.
  *
  * @param {string} url
- * @returns {string} normalizeJobUrl's canonical `url` on success, or the input
- *   unchanged when it does not parse as a job posting URL.
+ * @returns {string} The url-key identity for a normalizable posting, else the
+ *   input unchanged.
  */
 export function postingKey(url) {
   const r = normalizeJobUrl(url);
-  return r.ok ? r.url : String(url ?? "");
+  const raw = String(url ?? "");
+  if (!r.ok) return raw;
+  return normalizeUrl(r.url) || raw;
 }

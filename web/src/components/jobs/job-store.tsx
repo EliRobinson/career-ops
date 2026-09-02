@@ -220,9 +220,15 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
 
   // The single entry point for kind:"evaluate" — every launch site (paste dialog,
   // quick-evaluate bar, inbox shortlist, discovery card, assistant actions) hands
-  // it a raw URL and gets back a job whose `input` is ALWAYS the canonical
-  // postingKey, so job.input never splits between "canonical for some jobs, raw
-  // for others" again. Title default lives here only.
+  // it a raw URL and gets back a job whose `input` is ALWAYS normalizeJobUrl's
+  // canonical url, so job.input never splits between "canonical for some jobs,
+  // raw for others" again. Title default lives here only.
+  //
+  // The RECORD form, not postingKey: this string is what the run sends to
+  // /api/run and what the report header and tracker row end up carrying, so it
+  // has to stay a link a human can click. postingKey is the identity key derived
+  // FROM it, and every comparison against job.input applies postingKey to both
+  // sides — see job-url.mjs's header for why the two are separate.
   const startEvaluate = useCallback(
     (opts: StartEvaluateOpts): string | null => {
       const normalized = normalizeJobUrl(opts.url);

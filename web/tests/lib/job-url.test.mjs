@@ -18,6 +18,13 @@ import {
   domainIs,
   atsSourceFromHost,
 } from "../../src/lib/job-url.mjs";
+// Imported so postingKey's key can be asserted against the repo's ONE identity
+// key rather than against a literal that would silently stop meaning anything if
+// the core's canonicalization moved. Explore's canon() is not imported directly
+// (explore-ai.ts is TypeScript, unloadable under bare `node --test`, which is why
+// the mirrors are .mjs at all) — but canon() is a one-line `return normalizeUrl(u)`,
+// so asserting against normalizeUrl asserts against canon.
+import { normalizeUrl } from "../../src/lib/core/url-key.mjs";
 
 test("normalizeJobUrl: a plain ATS posting passes through unchanged", () => {
   // Given a Greenhouse posting, which a headless agent can already read
@@ -223,20 +230,45 @@ test("atsSourceFromHost: recognizes every ATS host sourceFromUrl (inbox.ts) reli
   assert.equal(atsSourceFromHost("careers.example.com"), null);
 });
 
-test("postingKey: the canonical url for a normalizable posting, LinkedIn included", () => {
-  // Given a plain ATS link, the key is just its normalized url
-  assert.equal(postingKey("https://boards.greenhouse.io/acme/jobs/4567890"), "https://boards.greenhouse.io/acme/jobs/4567890");
+test("postingKey: the url-key identity for a normalizable posting, LinkedIn included", () => {
+  // Given a plain ATS link, the key is normalizeUrl's key for it — note the
+  // trailing slash is gone, because url-key.mjs owns this shape now, not this
+  // module. Asserted against normalizeUrl itself rather than a literal, so this
+  // stays true if the core's canonicalization changes and the mirror follows.
+  const gh = "https://boards.greenhouse.io/acme/jobs/4567890";
+  assert.equal(postingKey(gh), normalizeUrl(gh));
 
   // Given two different LinkedIn spellings of the same job, both collapse to the
   // same key, which is the whole point: this is the identity a caller dedupes on
   assert.equal(
     postingKey("https://www.linkedin.com/jobs/view/senior-ai-engineer-at-acme-4434693435"),
-    "https://www.linkedin.com/jobs/view/4434693435/",
+    "https://www.linkedin.com/jobs/view/4434693435",
   );
   assert.equal(
     postingKey("https://www.linkedin.com/jobs/view/4434693435/"),
     postingKey("https://www.linkedin.com/jobs/view/senior-ai-engineer-at-acme-4434693435"),
   );
+  // ...including the collection/search spelling, which carries the id only in the
+  // query string and which normalizeUrl alone would key as a different posting
+  assert.equal(
+    postingKey("https://www.linkedin.com/jobs/collections/recommended/?currentJobId=4434693435"),
+    postingKey("https://www.linkedin.com/jobs/view/4434693435/"),
+  );
+});
+
+test("postingKey agrees with explore's key on a posting neither has to special-case", () => {
+  // The reason postingKey routes through normalizeUrl at all. TodayDashboard asks
+  // "is this discovered offer already in my pipeline?" with postingKey; Explore
+  // asks "have I seen this offer?" with canon(), which is normalizeUrl. A second
+  // key body here meant the same posting could answer differently on two screens
+  // showing the same card.
+  for (const url of [
+    "https://boards.greenhouse.io/acme/jobs/apply?gh_jid=4471829005&utm_source=li",
+    "https://jobs.lever.co/acme/9f2c1e10-0000-4a3b-9c1d-1a2b3c4d5e6f",
+    "http://Boards.Greenhouse.io/acme/jobs/apply/",
+  ]) {
+    assert.equal(postingKey(url), normalizeUrl(url), `postingKey and Explore disagree on ${url}`);
+  }
 });
 
 test("postingKey: hands back the input unchanged when it does not parse, never throws", () => {
@@ -245,4 +277,37 @@ test("postingKey: hands back the input unchanged when it does not parse, never t
   assert.equal(postingKey("not a url"), "not a url");
   assert.equal(postingKey(""), "");
   assert.doesNotThrow(() => postingKey("javascript:alert(1)"));
+});
+
+test("postingKey is idempotent, because two call sites double-apply it", () => {
+  // registry.ts's evaluate action passes postingKey(url) into ctx.jobForUrl,
+  // which postingKeys the needle again before comparing. That was invisibly safe
+  // while postingKey returned normalizeJobUrl's own output; now that it returns
+  // a url-key (no trailing slash, sorted params) the round trip has to be pinned,
+  // or a double-applied key stops matching a single-applied one and the duplicate
+  // -spend guard silently re-fires an evaluation the user already paid for.
+  for (const url of [
+    "https://www.linkedin.com/jobs/view/4434693435/",
+    "https://www.linkedin.com/jobs/view/senior-ai-engineer-at-acme-4434693435",
+    "https://www.linkedin.com/jobs/collections/recommended/?currentJobId=4434693435",
+    "https://boards.greenhouse.io/acme/jobs/apply?location=paris&gh_jid=4471829005",
+    "http://Boards.Greenhouse.io/acme/jobs/apply/",
+    "not a url",
+    "",
+  ]) {
+    const once = postingKey(url);
+    assert.equal(postingKey(once), once, `postingKey is not idempotent on ${JSON.stringify(url)}`);
+  }
+});
+
+test("postingKey never returns normalizeUrl's '' NO KEY sentinel", () => {
+  // normalizeUrl's own header: '' means NO KEY and must never match another ''.
+  // A Set membership test cannot honor that, so postingKey has to hand back
+  // something distinct instead. Two different unrecognizable inputs must stay
+  // two different keys.
+  const a = postingKey("not a url");
+  const b = postingKey("also not a url");
+  assert.notEqual(a, "");
+  assert.notEqual(b, "");
+  assert.notEqual(a, b, "two unparseable inputs collapsed onto one key");
 });
