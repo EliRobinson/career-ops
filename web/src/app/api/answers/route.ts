@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +11,7 @@ import { runPlanner, type PlannerField } from "@/lib/apply/planner";
 import { toAnswers } from "@/lib/apply/planner-answers.mjs";
 import { buildSavePayload } from "@/lib/apply/answers-snapshot.mjs";
 import { sanitizeQuestions, wordCapFrom, type Question } from "@/lib/apply/questions.mjs";
+import { isSensitiveQuestion } from "@/lib/apply/sensitive-questions.mjs";
 import { extractJsonObject } from "@/lib/extract-json-object.mjs";
 
 export const runtime = "nodejs";
@@ -56,6 +58,10 @@ async function loadCore(): Promise<Record<string, Function> | null> {
   return import(/* webpackIgnore: true */ pathToFileURL(core).href).catch(() => null);
 }
 
+/**
+ * Coerce an untrusted list into questions with a definite (possibly empty)
+ * answer, so nothing downstream has to keep testing for `undefined`.
+ */
 function asQuestions(raw: unknown): Question[] {
   return sanitizeQuestions(raw).map((q) => ({ ...q, answer: q.answer ?? "" }));
 }
@@ -114,7 +120,7 @@ async function readStored(file: string): Promise<Stored> {
 function writeStored(file: string, snapshot: ReturnType<typeof buildSavePayload>): Promise<{ ok: boolean; error?: string }> {
   const { state } = snapshot;
   const payload = JSON.stringify(snapshot);
-  const tmp = path.join(os.tmpdir(), `co-answers-${process.pid}-${Date.now()}.json`);
+  const tmp = path.join(os.tmpdir(), `co-answers-${process.pid}-${randomUUID()}.json`);
   fs.writeFileSync(tmp, payload);
   return new Promise((resolve) => {
     execFile(
@@ -134,6 +140,13 @@ function writeStored(file: string, snapshot: ReturnType<typeof buildSavePayload>
   });
 }
 
+/**
+ * The questions stored on a report, for the panel's first render.
+ *
+ * `rest` is stripped from the reply: the three groups the panel does not edit are
+ * carried by the server across a save, and shipping them to a browser that has no
+ * use for them only invites a client that starts round-tripping them.
+ */
 export async function GET(req: Request) {
   const n = new URL(req.url).searchParams.get("n")?.trim() ?? "";
   if (!n) return Response.json({ error: "a report number is required" }, { status: 400 });
@@ -144,6 +157,13 @@ export async function GET(req: Request) {
   return Response.json(stored);
 }
 
+/**
+ * Save questions onto a report, optionally drafting the blank ones first.
+ *
+ * Drafting never touches an answer that already has text, and never touches a
+ * sensitive question at all. Nothing here submits anything to an employer: the
+ * report is the only thing written.
+ */
 export async function POST(req: Request) {
   let body: { n?: string; questions?: unknown; draft?: boolean; cliId?: string; state?: string };
   try {
@@ -177,11 +197,24 @@ export async function POST(req: Request) {
 
   // Only draft what is still blank, so an answer the user wrote or edited is
   // never silently overwritten by a regenerated one.
-  const todo = questions.filter((q) => !q.answer.trim());
+  const blank = questions.filter((q) => !q.answer.trim());
+  // Sensitive questions are held back BEFORE the planner runs, not filtered out
+  // of its reply. The planner is told to refuse them, but a refusal it declines
+  // to make comes back as a confident invented answer about the candidate's visa
+  // status or pay, so the safest generated value is the one never generated.
+  const todo = blank.filter((q) => !isSensitiveQuestion(q.question));
   if (todo.length === 0) {
     const saved = await save(questions);
     if (!saved.ok) return Response.json({ error: `could not save: ${saved.error}` }, { status: 500 });
-    return Response.json({ ok: true, questions, drafted: 0, note: "every question already had an answer" });
+    return Response.json({
+      ok: true,
+      questions,
+      drafted: 0,
+      note:
+        blank.length > todo.length
+          ? "left blank on purpose: legal, visa, work authorization, salary and demographic questions are yours to answer"
+          : "every question already had an answer",
+    });
   }
 
   const title = path.basename(file).replace(/^\d+-/, "").replace(/-\d{4}-\d{2}-\d{2}\.md$/, "").replace(/-/g, " ");
@@ -230,11 +263,15 @@ export async function POST(req: Request) {
   let drafted = 0;
   const merged = questions.map((q) => {
     if (q.answer.trim()) return q;
+    // Said twice on purpose. `todo` already excluded these, so no value for one
+    // can exist; this line is what keeps that true after a later edit changes how
+    // `todo` is built. A guarantee stated only as a side effect of a filter three
+    // screens up is one edit away from being gone.
+    if (isSensitiveQuestion(q.question)) return q;
     const idx = todo.indexOf(q);
     const answer = idx === -1 ? undefined : answers[`q${idx}`];
-    // needs_confirmation marks the sensitive fields the planner is told to refuse
-    // (legal, visa, work authorization, salary, demographic). Those come back
-    // blank by design, so they stay the user's to answer.
+    // needs_confirmation is the planner's own refusal flag. It is a second signal
+    // rather than the guarantee: the guarantee is the predicate above.
     if (!answer || answer.needs_confirmation || !answer.value.trim()) return q;
     drafted += 1;
     return { ...q, answer: answer.value };
