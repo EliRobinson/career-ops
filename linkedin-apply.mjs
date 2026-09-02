@@ -467,6 +467,11 @@ export const APPLY_URL_LABEL = 'Apply URL';
 export function upsertApplyUrl(md, applyUrl) {
   const url = String(applyUrl ?? '').trim();
   if (!/^https?:\/\//i.test(url)) throw new Error('an http(s) apply URL is required');
+  // A URL is ONE line, and this writes into a line-oriented header block. Without
+  // this check a newline inside `url` emits a second header line, which can forge
+  // a `**URL:**` and overwrite the canonical posting link the whole point of this
+  // function is to leave alone. Control characters go for the same reason.
+  if (/[\s\u0000-\u001f\u007f]/.test(url)) throw new Error('an apply URL must be a single line with no whitespace');
   const lines = String(md ?? '').split('\n');
   const line = `**${APPLY_URL_LABEL}:** ${url}`;
 
@@ -631,6 +636,14 @@ function runSelfTest() {
   let threw = false;
   try { upsertApplyUrl(report, 'javascript:alert(1)'); } catch { threw = true; }
   check(threw, 'upsertApplyUrl refuses a non-http URL');
+  // A newline would emit a SECOND header line and could forge a **URL:**, which
+  // is the one field this module promises never to overwrite.
+  let injected = false;
+  try { upsertApplyUrl(report, 'https://evil.test/x\n**URL:** https://evil.test/phish'); } catch { injected = true; }
+  check(injected, 'upsertApplyUrl refuses a URL carrying a newline');
+  check((() => { try { upsertApplyUrl(report, 'https://evil.test/x **URL:** https://evil.test/p'); return false; } catch { return true; } })(), 'upsertApplyUrl refuses a URL carrying a space');
+  check((() => { try { upsertApplyUrl(report, 'https://evil.test/x\ty'); return false; } catch { return true; } })(), 'upsertApplyUrl refuses a URL carrying a tab');
+  check(upsertApplyUrl(report, '  https://x/1  ').includes('**Apply URL:** https://x/1'), 'upsertApplyUrl still trims surrounding whitespace');
   const noUrlField = upsertApplyUrl('# Evaluation: Acme\n**Score:** 4.0/5\n\n---\n\n## A) X\n', 'https://x/1');
   check(noUrlField.includes('**Apply URL:**') && noUrlField.indexOf('**Apply URL:**') < noUrlField.indexOf('## A)'), 'upsertApplyUrl still lands in the header when **URL:** is absent');
 

@@ -48,6 +48,21 @@ function reportField(file: string, label: string): string {
   }
 }
 
+/** The resolver's JSON answer, or null when it did not produce a readable one.
+ *  Parsed rather than string-matched: `"ok": true` only appears verbatim under
+ *  the current 2-space pretty-print, so a formatting change on the resolver side
+ *  would silently turn every successful write into a 500. */
+function resolverJson(stdout: string): Record<string, unknown> | null {
+  const start = stdout.indexOf("{");
+  if (start === -1) return null;
+  try {
+    const parsed: unknown = JSON.parse(stdout.slice(start));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Run the core resolver. Never rejects: a failure becomes an unresolved answer. */
 function runResolver(args: string[]): Promise<{ stdout: string; stderr: string }> {
   const script = rootScript("linkedin-apply");
@@ -84,8 +99,16 @@ export async function POST(req: Request) {
     if (!/^https?:\/\//i.test(pick)) {
       return Response.json({ error: "an http(s) application URL is required" }, { status: 400 });
     }
+    // A URL is ONE line. `pick` is written into the report's line-oriented header,
+    // where an embedded newline emits a second line and can forge a `**URL:**`,
+    // the one field this feature promises never to overwrite. upsertApplyUrl
+    // refuses it too; rejecting here makes it a 400 the UI can show rather than a
+    // 500 raised from inside the resolver.
+    if (/[\s\u0000-\u001f\u007f]/.test(pick)) {
+      return Response.json({ error: "an application URL must be a single line with no whitespace" }, { status: 400 });
+    }
     const { stdout, stderr } = await runResolver(["--report", file, "--set", pick]);
-    if (!stdout.includes('"ok": true')) {
+    if (resolverJson(stdout)?.ok !== true) {
       return Response.json({ error: `could not record that URL: ${(stderr || stdout).slice(0, 200)}` }, { status: 500 });
     }
     return Response.json({ status: "resolved", applyUrl: pick, source: "manual" } satisfies Resolution);
