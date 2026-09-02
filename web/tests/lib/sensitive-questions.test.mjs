@@ -1,18 +1,18 @@
-// The one guarantee this panel makes that a candidate cannot check for
+// The one guarantee this system makes that a candidate cannot check for
 // themselves: legal, visa, work-authorization, salary and demographic questions
 // are never auto-answered.
 //
 // Before this module, that guarantee was a single bullet in the planner prompt
-// plus a `needs_confirmation === true` test on the reply. Both are the planner
-// agreeing to refuse. A planner that instead returns a fluent, confident,
-// entirely invented sentence about the candidate's immigration status sets
-// needs_confirmation:false, and the old code stored it, wrote it into the
-// report, and handed it to `apply` for the next real application.
+// plus a needs_confirmation flag on the reply. Both are the planner agreeing to
+// refuse. A planner that instead returns a fluent, confident, entirely invented
+// sentence about the candidate's immigration status sets needs_confirmation
+// false, and the value was used: typed into a real employer's form, or stored
+// on the report and re-read before the next application.
 //
-// So the assertions here are about a value never being generated in the first
-// place. They are deliberately lopsided: the false-positive cases are worth one
-// answer the candidate types themselves, the false-negative case is a fabricated
-// visa answer sent to an employer.
+// So the assertions here are about a value never reaching a field at all. They
+// are deliberately lopsided: the false-positive cases cost one answer the
+// candidate types themselves, the false-negative case is a fabricated visa
+// answer sent to an employer.
 //
 // Run:  node --test tests/lib/sensitive-questions.test.mjs
 
@@ -46,9 +46,12 @@ const MUST_REFUSE = [
   ["legal", "Are you bound by a non-compete agreement?"],
   ["consent", "I agree to the privacy policy and terms of service."],
   ["consent", "I consent to the processing of my data under GDPR."],
+  // A bare "Terms *" checkbox, which the apply flow's original consent regex
+  // caught with a bare `terms`. This category has to stay a superset of it.
+  ["consent", "Terms *"],
 ];
 
-/** Ordinary free-text questions. These are the whole point of the panel. */
+/** Ordinary free-text questions. Answering these is the whole point. */
 const MUST_ALLOW = [
   "Describe a workflow you have meaningfully changed using AI. Under 150 words.",
   "Why do you want to work here?",
@@ -56,6 +59,11 @@ const MUST_ALLOW = [
   "Tell us about a time you disagreed with a decision and what you did.",
   "How do you approach code review on a team of eight?",
   "What would your first 90 days look like?",
+  // "in terms of" is ordinary English and must not be read as a consent label,
+  // even though the consent category has to keep the bare word "terms" to cover
+  // a checkbox labelled only "Terms *".
+  "In terms of impact, what are you proudest of?",
+  "How do you think about trade-offs in terms of cost and speed?",
 ];
 
 test("every question a form uses to ask something protected is refused", () => {
@@ -83,7 +91,7 @@ test("matching ignores case and punctuation around the phrase", () => {
 test("a whole word is required, so an innocent substring is not a refusal", () => {
   // The cost of getting this wrong is not symmetric with a miss, but a predicate
   // that fires on any question containing "sex" inside "sexagenarian" or "nda"
-  // inside "agenda" would refuse most of the panel and teach the user to ignore
+  // inside "agenda" would refuse most of the form and teach the user to ignore
   // the label.
   assert.equal(sensitiveCategory("What is on the agenda for your first week?"), null);
   assert.equal(sensitiveCategory("Describe how you manage a large backlog."), null);
