@@ -57,6 +57,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import * as yaml from 'js-yaml';
 import { pass, fail, warn, run, lastRunFailure, formatRunFailure, fileExists, finish, ROOT, QUICK, NODE, DEFAULT_SCRIPT_TIMEOUT_MS, getBash, toBashPath, hermeticGitEnv } from './tests/helpers.mjs';
 import { flagValue, hasFlag } from './lib/cli-flags.mjs';
+import { collectMjsFiles } from './lib/mjs-files.mjs';
 
 /**
  * Read a repo-relative text file as UTF-8.
@@ -222,14 +223,29 @@ console.log('\n🧪 career-ops test suite\n');
 
 console.log('1. Syntax checks');
 
-const mjsFiles = readdirSync(ROOT).filter(f => f.endsWith('.mjs'));
+// RECURSIVE, and sharing its walk with `npm run lint` (#3419). This read the
+// repository root non-recursively, which covered 121 of the ~575 .mjs files
+// here and printed a `syntax OK` line for each one — so the 263 files under
+// tests/ were absent from a log that looked complete. It also narrowed by one
+// every time a file moved out of the root, silently: #3306 moved eleven suites
+// into tests/ and #3388 nine, and the shortfall was only noticed later as a
+// two-check arithmetic discrepancy in #3411. Both scopes now come from the
+// same collector, so neither can drift from the other again.
+const mjsFiles = collectMjsFiles(ROOT).map(f => f.slice(ROOT.length + 1).replace(/\\/g, '/'));
+
+// State the scope in one line. The per-file `syntax OK` output is what hid the
+// old shortfall: a number the reader can compare against `npm run lint`'s own
+// total makes a narrowing visible at a glance instead of requiring someone to
+// diff two runs' pass labels.
+console.log(`  (${mjsFiles.length} .mjs files, recursive from the repository root)`);
 
 // `node --check` parses a file and exits; it runs no user code, touches no
 // shared state, and its result depends on nothing but that one file. Spawning
-// the 100+ root scripts one at a time was pure process-startup latency, so they
-// go through a bounded pool instead (#2387). Results are collected by index and
-// reported afterwards in the original readdir order, so the log stays
-// byte-identical to the sequential version regardless of completion order.
+// the files one at a time was pure process-startup latency, so they go through
+// a bounded pool instead (#2387) — which is also what keeps the recursive scope
+// above a wall-clock non-event. Results are collected by index and reported
+// afterwards in collector order, so the log stays byte-identical to the
+// sequential version regardless of completion order.
 const SYNTAX_POOL_SIZE = 8;
 const execFileAsync = promisify(execFile);
 const syntaxOk = new Array(mjsFiles.length);
@@ -282,6 +298,23 @@ console.log('\n2. Script execution (graceful on empty data)');
 // before the kill: at 0.75 a 30s script warns at 22.5s, nearly a full run of
 // headroom.
 const SLOW_SCRIPT_WARN_FRACTION = 0.75;
+
+/**
+ * Whether a failed run died with an UNCAUGHT exception rather than exiting.
+ *
+ * The two are not the same outcome and only one of them is ever "expected".
+ * Node prints an uncaught error as `SomeError: message` at the start of a line
+ * followed by a stack; a script reporting its own problem and exiting non-zero
+ * prints neither. Both parts are required, so a script whose own diagnostic
+ * happens to start with "Error: " is not mistaken for a crash.
+ *
+ * @param {{stderr?: string}|null} failure
+ * @returns {boolean}
+ */
+function crashedBeforeRunning(failure) {
+  const stderr = String(failure?.stderr ?? '');
+  return /^[A-Za-z]*Error(?: \[[^\]]+\])?: /m.test(stderr) && /\n\s+at /.test(stderr);
+}
 
 const scripts = [
   { name: 'cv-sync-check.mjs', expectExit: 1, allowFail: true }, // fails without cv.md (normal in repo)
@@ -341,15 +374,6 @@ const scripts = [
   // starts taking half a minute still fails loudly instead of inheriting a
   // budget sized for this one.
   { name: 'tracker-writer-lock-tests.mjs', expectExit: 0, timeoutMs: 180_000 },
-  // Root-level standalone suites shipped in SYSTEM_PATHS but previously never
-  // executed by CI (issue #1624). All are fast (<0.5s each), so they run in
-  // both quick and full mode like their siblings above.
-  //
-  // The nine *.test.mjs that used to sit here moved to tests/ (#3306) and are
-  // auto-discovered. These two remain because they are named test-*.mjs rather
-  // than *.test.mjs, so discovery does not match them.
-  { name: 'test-trust-validator.mjs', expectExit: 0 },
-  { name: 'test-salary-filter.mjs', expectExit: 0 },
   { name: 'validate-portals.mjs --file templates/portals.example.yml', expectExit: 0 },
   { name: 'validate-system-paths-coverage.mjs --self-test', expectExit: 0 },
   // The bare coverage run is NOT here on purpose: this section executes each
@@ -479,8 +503,16 @@ try {
     }
     if (result !== null) {
       pass(`${name} runs OK`);
-    } else if (allowFail) {
+    } else if (allowFail && !crashedBeforeRunning(lastRunFailure())) {
       warn(`${name} exited with error (expected without user data)`);
+    } else if (allowFail) {
+      // allowFail says "a non-zero exit is expected here", never "any outcome
+      // is fine". A script that dies with an uncaught exception did not run at
+      // all, and reporting that as the expected failure is how #3440 sat in
+      // main: cv-sync-check.mjs threw a ReferenceError at module scope, exited
+      // 1 like a missing cv.md, and the suite printed the reassuring warning
+      // for a script that never reached a single check.
+      fail(`${name} crashed before running — allowFail covers an expected exit, not an uncaught error${formatRunFailure()}`);
     } else {
       // Include the child's exit status and streams. Without them a CI-only
       // failure arrives as a bare `<name> crashed`: no stack, no assertion
@@ -2409,13 +2441,27 @@ if (
   /^via:/m.test(batchMachineSummary) &&
   /^company_confidential:/m.test(batchMachineSummary) &&
   /^reports_to:/m.test(batchMachineSummary) &&
+  /^requirement_importance:/m.test(batchMachineSummary) &&
   /['"]via['"]/.test(patternsMachineFields) &&
   /['"]company_confidential['"]/.test(patternsMachineFields) &&
-  /['"]reports_to['"]/.test(patternsMachineFields)
+  /['"]reports_to['"]/.test(patternsMachineFields) &&
+  /['"]requirement_importance['"]/.test(patternsMachineFields)
 ) {
   pass('batch Machine Summary fields are preserved by the downstream parser');
 } else {
   fail('batch Machine Summary and downstream parser fields are misaligned');
+}
+
+// batch-prompt.md carries the Machine Summary schema TWICE — the standalone
+// #### Machine Summary section and the report-header template in Step 3. A key
+// added to one fence only produces reports whose shape depends on which fence
+// the worker happened to follow, so both are asserted (same rule the existing
+// two-fence checks enforce).
+const machineSummaryFenceCount = (batchPrompt.match(/^requirement_importance:/gm) ?? []).length;
+if (machineSummaryFenceCount >= 2) {
+  pass('requirement_importance is present in BOTH batch-prompt Machine Summary fences');
+} else {
+  fail(`requirement_importance appears in ${machineSummaryFenceCount} batch-prompt Machine Summary fence(s), expected both`);
 }
 
 // ── 7e. CV SECTION ORDER CHECK IS LANGUAGE-AWARE ────────────────
@@ -4599,6 +4645,19 @@ if (
   fail('scan.md missing local_parser_ok skip rules for agent scan');
 }
 
+// #2551's fix landed in modes/pipeline.md only, so modes/scan.md kept ordering parallel
+// Playwright batches at Level 1 — the highest-volume browser-backed step (#3366). The
+// marker assertion is per-file for that reason: a rule that holds in one mode file and
+// not in another is exactly what went unnoticed.
+if (
+  scanMode.includes('**Level 1 — Playwright Scan** (sequential — NEVER parallel Playwright)') &&
+  !scanMode.includes('**Level 1 — Playwright Scan** (parallel')
+) {
+  pass('scan.md Level 1 runs Playwright sequentially, matching the shared-session rule (#3366)');
+} else {
+  fail('scan.md Level 1 still orders parallel Playwright batches, contradicting pipeline.md and _shared.md (#3366)');
+}
+
 // Guard against scan.md's manual-parse conventions drifting from what providers/*.mjs
 // emit and scan.mjs's filters consume (location/salary/description). We assert the two
 // most specific, consumed-field tokens: Ashby `secondaryLocations` (location_filter) and
@@ -6598,14 +6657,22 @@ console.log('\n12c. Materialized skill index mode');
     writeFileSync(join(canonicalDir, 'SKILL.md'), '---\nname: career-ops\n---\n');
 
     let staged = '';
+    // Keep the git failure: an unrelated breakage here (git missing from PATH,
+    // a corrupt fixture index) leaves `staged` empty and is then reported as
+    // "the runtime config layer is unpinned", which sends the reader to
+    // GIT_CONFIG_* pinning for a problem that has nothing to do with it. The
+    // assertion below is still the verdict; this only says why it failed.
+    let stagingError = '';
     try {
       gitRun(['add', '--', '.agents/skills/career-ops/SKILL.md']);
       staged = gitRun(['ls-files', '--', '.agents/skills/career-ops/SKILL.md']);
-    } catch {
-      // Left empty: the assertion below is the report.
+    } catch (e) {
+      stagingError = e.message;
     }
     if (staged) {
       pass('injected GIT_CONFIG_* core.excludesFile cannot reach the skill fixture (#2567)');
+    } else if (stagingError) {
+      fail(`injected GIT_CONFIG_* isolation check could not stage the fixture: ${stagingError}`);
     } else {
       fail('injected GIT_CONFIG_* core.excludesFile reached the fixture - the runtime config layer is unpinned (#2567)');
     }
@@ -7232,6 +7299,8 @@ try {
   if (
     locationHintFromUrl('https://jobs.ashbyhq.com/snowflake/4fe8d816') === '' &&
     locationHintFromUrl('https://boards.greenhouse.io/acme/jobs/12345') === '' &&
+    locationHintFromUrl('https://app.mokahr.com/social-recruitment/acme/123#/job/4fe8d816') === '' &&
+    locationHintFromUrl('https://acme.jobs.personio.com/job/12345') === '' &&
     locationHintFromUrl('not a url') === '' &&
     locationHintFromUrl('') === '' &&
     locationHintFromUrl(null) === ''
@@ -12457,6 +12526,29 @@ if (!sqliteAvailable) {
         fail('sync modified the corrupted markdown (must only diagnose)');
       }
 
+      // A numeric prefix is not a valid application number. parseInt() used to
+      // accept `9junk` as 9, so --check reported the source as clean and the
+      // index could attach this row (and its status history) to the wrong ID.
+      const malformedId = clean +
+        '| 9junk | 2026-01-06 | Prefix Co | PM | 3.5/5 | Applied | ❌ | — | malformed id |\n';
+      writeFileSync(md, malformedId);
+      if (trackerRun(['sync', '--check']) === null) {
+        pass('sync --check rejects an application ID with a numeric prefix');
+      } else {
+        fail('sync --check accepted a numeric-prefix application ID');
+      }
+      const repairedId = JSON.parse(trackerRun(['query', '--company', 'Prefix Co', '--json']) || '[]');
+      if (repairedId.length === 1 && repairedId[0].id === 3) {
+        pass('malformed application ID is reassigned instead of coerced to its numeric prefix');
+      } else {
+        fail(`malformed application ID was not safely reassigned: ${JSON.stringify(repairedId)}`);
+      }
+      if (trackerRun(['query', '--id', '1junk', '--json']) === null && trackerRun(['history', '--id', '1junk']) === null) {
+        pass('query/history reject numeric-prefix --id values');
+      } else {
+        fail('query/history accepted a numeric-prefix --id value');
+      }
+
       // 3. Staleness: query after an md edit must auto-resync (no stale reads).
       writeFileSync(md, clean +
         '| 3 | 2026-01-07 | Delta | Analyst | 4.5/5 | Applied | ✅ | [3](../reports/003-delta-2026-01-07.md) | new |\n');
@@ -14579,8 +14671,8 @@ try {
   // Bundled plugins: discovery + import coverage + static deny-list + firewall.
   const bundled = discoverPlugins([join(ROOT, 'plugins')]);
   const ids = bundled.map(p => p.id).sort().join(',');
-  if (ids === 'apify,gmail,notion') pass('all 3 bundled reference plugins discovered (apify, gmail, notion)');
-  else fail(`bundled plugins = "${ids}" (expected apify,gmail,notion)`);
+  if (ids === 'apify,gmail,h1b-sponsor,notion') pass('all 4 bundled plugins discovered (apify, gmail, h1b-sponsor, notion)');
+  else fail(`bundled plugins = "${ids}" (expected apify,gmail,h1b-sponsor,notion)`);
 
   let importOk = bundled.length > 0;
   for (const p of bundled) {
@@ -15235,6 +15327,117 @@ try {
     fail(`modes/oferta.md lost report block(s): ${missingBlocks.join(', ')} — BREAKING for the web report view`);
   }
 
+  // 55.4b Block B's table columns are CONTRACT (#2330). Block B was the last
+  // report block whose columns were unspecified — oferta.md said only "create a
+  // table with each JD requirement mapped to exact lines in the CV" — so the
+  // requirement-importance design is also the moment those columns get pinned
+  // down. They were frozen deliberately on the day they landed: the 18 localized
+  // evaluation modes each describe Block B in their own words, and a rename here
+  // that does not reach them splits the report format silently.
+  const BLOCK_B_COLUMNS = ['Requirement', 'Importance', 'Match', 'JD signal', 'Evidence / gap'];
+  const blockBSection = ofertaSrc.match(/## Block B [\s\S]*?\n## Block C /)?.[0] ?? '';
+  const blockBHeaderRow = blockBSection.match(/^\|\s*Requirement\s*\|.*\|$/m)?.[0] ?? '';
+  const missingBlockBCols = BLOCK_B_COLUMNS.filter(
+    (c) => !blockBHeaderRow.includes(c),
+  );
+  if (blockBHeaderRow && missingBlockBCols.length === 0) {
+    pass('modes/oferta.md Block B keeps its frozen column set (#2330)');
+  } else if (!blockBHeaderRow) {
+    fail('modes/oferta.md Block B has no Requirement-led table header row — the #2330 column freeze cannot verify');
+  } else {
+    fail(`modes/oferta.md Block B lost column(s): ${missingBlockBCols.join(', ')} — columns are contract (#2330)`);
+  }
+  // The ORDER is contract too (2-sep): on a 390px viewport a 5-column table
+  // scrolls horizontally and only the first three columns are visible, so the
+  // decisive trio (Requirement, Importance, Match) must lead. Measured on the
+  // web report view before this freeze: with Importance in 4th place the column
+  // the whole block exists for was off-screen on mobile.
+  const blockBHeaderCells = blockBHeaderRow.split('|').map((c) => c.trim()).filter(Boolean);
+  if (blockBHeaderCells.slice(0, BLOCK_B_COLUMNS.length).join('|') === BLOCK_B_COLUMNS.join('|')) {
+    pass('modes/oferta.md Block B keeps its frozen column ORDER (decisive trio first)');
+  } else {
+    fail(`modes/oferta.md Block B column order drifted: ${blockBHeaderCells.join(' | ')} — expected ${BLOCK_B_COLUMNS.join(' | ')}`);
+  }
+  const batchBlockBRow = readFile('batch/batch-prompt.md').match(/^\|\s*Requirement\s*\|.*\|$/m)?.[0] ?? '';
+  if (batchBlockBRow && batchBlockBRow.split('|').map((c) => c.trim()).filter(Boolean).slice(0, 5).join('|') === BLOCK_B_COLUMNS.join('|')) {
+    pass('batch/batch-prompt.md Block B mirrors the frozen column order');
+  } else {
+    fail(`batch/batch-prompt.md Block B column order diverges from modes/oferta.md: ${batchBlockBRow || '(no header row)'}`);
+  }
+
+  // 55.4c The two rules that make the importance column defensible rather than
+  // just more numbers in the report. Frozen at doc level, in the style of the
+  // upskill trust-model promises: both are model-followed instructions with no
+  // runtime to assert against, so the text IS the enforcement surface and its
+  // deletion must fail CI rather than pass quietly.
+  //
+  //   the gate      — importance may only create obligations from JD-stated or
+  //                   JD-structural evidence, never a market-weight guess
+  //   the two-pass  — importance is fixed from the JD BEFORE cv.md is read, so
+  //                   rule            a written "Strong" cannot anchor it
+  const blockBPromises = [
+    ['inferred cap', /can \*\*never\*\* be `critical` or `high`/],
+    ['gate statement', /never from a market-weight guess/],
+    ['hard_stops exclusion', /`inferred` row never contributes to `hard_stops`/],
+    ['two-pass rule', /before reading `cv\.md`/],
+    ['no revision after pass 2', /never revised in pass 2/],
+    ['verbatim quote for stated', /\*\*verbatim\*\* JD quote/],
+    ['score neutrality', /does \*\*not\*\* affect the 1-5 global score/],
+  ];
+  const brokenPromises = blockBPromises.filter(([, re]) => !re.test(blockBSection)).map(([name]) => name);
+  if (brokenPromises.length === 0) {
+    pass('modes/oferta.md Block B keeps the frozen importance-evidence promises (#2330)');
+  } else {
+    fail(`modes/oferta.md Block B dropped importance promise(s): ${brokenPromises.join(', ')} — these ARE the feature (#2330)`);
+  }
+
+  // The gate has to hold for the batch path too, or headless workers become the
+  // hole in it: batch/batch-prompt.md is a second, independent writer of Block B.
+  const batchPromptSrc = readFile('batch/batch-prompt.md');
+  const batchGatePromises = [
+    ['inferred cap', /can \*\*never\*\* be `critical` or `high`/],
+    ['gate statement', /never from a market-weight guess/],
+    ['two-pass rule', /before reading `cv\.md`/],
+  ];
+  const brokenBatchPromises = batchGatePromises.filter(([, re]) => !re.test(batchPromptSrc)).map(([name]) => name);
+  if (brokenBatchPromises.length === 0) {
+    pass('batch workers inherit the Block B importance-evidence gate (#2330)');
+  } else {
+    fail(`batch/batch-prompt.md dropped importance gate rule(s): ${brokenBatchPromises.join(', ')} — batch would bypass the gate (#2330)`);
+  }
+
+  // 55.4d The two-pass rule is only real if nothing loads candidate evidence
+  // BEFORE Block B's first pass. batch-prompt.md's Step 2 preamble used to open
+  // with "Read `cv.md`, `article-digest.md`, ..." for every block at once, which
+  // made the rule unachievable on the batch path however carefully Block B
+  // worded it — the ordering was lost two sections earlier. Asserted on the
+  // preamble's text because that is where the regression would reappear: any
+  // future edit that hoists the CV read back up to Step 2 silently re-anchors
+  // every batch evaluation's importance column.
+  const step2Preamble = batchPromptSrc.match(/### Step 2 — Evaluate A-G[\s\S]*?\n#### Block B /)?.[0] ?? '';
+  const hoistsCvRead = /Read `cv\.md`/.test(step2Preamble);
+  const defersCvRead = /\*\*Do not read `cv\.md` or `article-digest\.md` yet\.\*\*/.test(step2Preamble);
+  const namesLoadPoint = /\*\*Load\*\* `cv\.md` and `article-digest\.md` now/.test(batchPromptSrc);
+  // The Sources of Truth table is the SECOND place the ordering can be lost:
+  // its "When" column said `cv.md` → "Always" under a heading that reads "read
+  // before evaluating", which contradicts the deferral in Step 2 just as
+  // effectively. Both hoist points are asserted, or fixing one leaves the other.
+  const sourcesTable = batchPromptSrc.match(/## Sources of Truth[\s\S]*?\nRules:/)?.[0] ?? '';
+  const cvRow = sourcesTable.match(/^\| CV \| `cv\.md` \|(.*)\|$/m)?.[1] ?? '';
+  const cvRowDefers = /Deferred to Block B pass 2/.test(cvRow);
+  if (!step2Preamble) {
+    fail('batch/batch-prompt.md Step 2 → Block B region not found — the #2330 two-pass ordering freeze cannot verify');
+  } else if (!cvRow) {
+    fail('batch/batch-prompt.md Sources of Truth has no `cv.md` row — the #2330 two-pass ordering freeze cannot verify');
+  } else if (!hoistsCvRead && defersCvRead && namesLoadPoint && cvRowDefers) {
+    pass('batch/batch-prompt.md defers the CV read until Block B pass 2 at both hoist points, so the two-pass rule is achievable (#2330)');
+  } else {
+    fail(
+      'batch/batch-prompt.md broke the Block B two-pass ordering (#2330): ' +
+      `hoistsCvRead=${hoistsCvRead} defersCvRead=${defersCvRead} namesLoadPoint=${namesLoadPoint} cvRowDefers=${cvRowDefers}`,
+    );
+  }
+
   // 55.5 cross-check: the web parser still speaks the same column names
   const webParserPath = join(ROOT, 'web', 'src', 'lib', 'career-ops.ts');
   if (existsSync(webParserPath)) {
@@ -15327,6 +15530,41 @@ try {
         // run()'s default 30s is short for six suites in one child process.
         const killed = lastRunFailure()?.signal;
         fail(`web pdf write-scope unit suites failed${killed ? ` (killed: ${killed})` : ''} (run: node --test ${webUnits.join(' ')})`);
+      }
+
+      // Parity: everything web/package.json would run must be something we DO run.
+      // The block above only reads web/tests/lib, while web's own script is
+      // `node --test "tests/**/*.test.mjs"` — recursive. Today those agree (39 of
+      // 39 live in lib/), and nothing anywhere asserts that they keep agreeing.
+      // The day a suite lands in web/tests/routes/, web-ci.yml still runs it (its
+      // glob is recursive), so the failure this prevents is not "nobody runs it".
+      // It is narrower and worse: the instrument we MERGE by stops looking. A
+      // co-preview lot comes back green having skipped a suite that exists, while
+      // the PR's own informative CI is the only thing still watching it. Two
+      // measurements of the same fact, diverging in silence. Discovered on both
+      // sides, so this cannot rot into a stale list of its own.
+      try {
+        const webTestsRoot = join(ROOT, 'web', 'tests');
+        const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+          const p = join(dir, e.name);
+          if (e.isDirectory()) return walk(p);
+          return e.isFile() && e.name.endsWith('.test.mjs') ? [p] : [];
+        });
+        if (existsSync(webTestsRoot)) {
+          const gated = new Set(webUnits.map((f) => join(ROOT, f)));
+          const ungated = walk(webTestsRoot).filter((f) => !gated.has(f)).sort();
+          if (ungated.length === 0) {
+            pass(`every web suite is gated by the required check (${webUnits.length} discovered)`);
+          } else {
+            fail(
+              `${ungated.length} web suite(s) run in web's own CI but NOT in this required check: ` +
+              `${ungated.map((f) => f.slice(ROOT.length + 1)).join(', ')} — ` +
+              `this section only reads web/tests/lib, so anything outside it gates nothing`,
+            );
+          }
+        }
+      } catch (err) {
+        fail(`web suite parity check could not run (${err.message}) — that is not the same as "they all match"`);
       }
 
       if (invocation && prompts) {
@@ -17437,6 +17675,164 @@ try {
   }
 } catch (e) {
   fail(`formatRunFailure clipping check: ${e.message}`);
+}
+
+// ── FUNDING MANIFEST INTEGRITY (funding.json, fundingjson.org v1.1.0) ──
+// The manifest is CRAWLED by a directory that re-reads it on its own schedule,
+// so a break here degrades silently: the listing goes stale or drops, and the
+// first signal is an email that never arrives. SYSTEM_PATHS coverage only
+// guarantees the file SHIPS; nothing until now checked that it still parses or
+// that its required fields survived an edit.
+//
+// The dated-metric rule is the project's own, not the schema's: every count in
+// a description carries the date it was counted, because a bare "68,000 stars"
+// is stale the week after it's written and a funder reading it cannot tell.
+
+console.log('\n72. Funding manifest integrity (funding.json)');
+
+try {
+  const fundingRaw = readFile('funding.json');
+  let funding = null;
+  try {
+    funding = JSON.parse(fundingRaw);
+    pass('funding.json parses as JSON');
+  } catch (e) {
+    fail(`funding.json does not parse: ${e.message}`);
+  }
+
+  if (funding) {
+    if (funding.version === 'v1.1.0') {
+      pass('funding.json declares schema version v1.1.0');
+    } else {
+      fail(`funding.json version is ${JSON.stringify(funding.version)}, expected "v1.1.0"`);
+    }
+
+    const entity = funding.entity || {};
+    const entityMissing = ['type', 'role', 'name', 'email', 'webpageUrl']
+      .filter((k) => !entity[k]);
+    if (entityMissing.length === 0 && entity.webpageUrl?.url && entity.webpageUrl?.wellKnown) {
+      pass('funding.json entity carries every required field, webpageUrl + wellKnown included');
+    } else {
+      fail(`funding.json entity incomplete: missing ${entityMissing.join(', ') || 'webpageUrl.url/wellKnown'}`);
+    }
+
+    const projects = Array.isArray(funding.projects) ? funding.projects : [];
+    const badProject = projects.find((pr) => !pr.guid || !pr.name || !pr.description
+      || !pr.webpageUrl?.url || !pr.webpageUrl?.wellKnown || !pr.repositoryUrl?.url
+      || !Array.isArray(pr.licenses) || pr.licenses.length === 0);
+    if (projects.length > 0 && !badProject) {
+      pass(`funding.json lists ${projects.length} project(s), each with guid, urls, wellKnown and a license`);
+    } else {
+      fail(`funding.json projects invalid: ${projects.length === 0 ? 'none listed' : `${badProject.guid || '(no guid)'} incomplete`}`);
+    }
+
+    // A plan pointing at a channel guid that no longer exists is the shape an
+    // edit produces: the channel gets renamed, the plan keeps the old id, and
+    // the directory renders a funding option with nowhere to send money.
+    const channels = Array.isArray(funding.funding?.channels) ? funding.funding.channels : [];
+    const plans = Array.isArray(funding.funding?.plans) ? funding.funding.plans : [];
+    const channelIds = new Set(channels.map((c) => c.guid));
+    const orphanPlan = plans.find((pl) => (pl.channels || []).some((c) => !channelIds.has(c)));
+    if (channels.length > 0 && plans.length > 0 && !orphanPlan) {
+      pass(`funding.json has ${channels.length} channel(s) and ${plans.length} plan(s), every plan channel resolvable`);
+    } else if (!channels.length || !plans.length) {
+      fail('funding.json must declare at least one funding channel and one plan');
+    } else {
+      fail(`funding.json plan "${orphanPlan.guid}" references a channel guid that no channel declares`);
+    }
+
+    // Dated metrics: any description quoting a count must say when it was counted.
+    const METRIC_RE = /\d[\d,.]*\+?\s*(?:GitHub\s+)?(?:stars|forks|contributors|merged pull requests|pull requests|community members|installs)/i;
+    const COUNTED_RE = /counted\s+\d{1,2}\s+\w{3,}\s+\d{4}/i;
+    const descriptions = [
+      ['entity', entity.description || ''],
+      ...projects.map((pr) => [`project ${pr.guid}`, pr.description || '']),
+    ];
+    const undated = descriptions.filter(([, text]) => METRIC_RE.test(text) && !COUNTED_RE.test(text));
+    if (undated.length === 0) {
+      pass('every funding.json description that quotes a count also states when it was counted');
+    } else {
+      fail(`funding.json ${undated.map(([w]) => w).join(', ')}: quotes a metric with no "counted <date>"`);
+    }
+  }
+} catch (e) {
+  fail(`funding manifest integrity check: ${e.message}`);
+}
+
+console.log('\n73. Gemini evaluator and encoding');
+
+let geminiTmp = null;
+try {
+  geminiTmp = mkdtempSync(join(ROOT, 'co-gemini-'));
+  const configDir = join(geminiTmp, 'config');
+  const modesDir = join(geminiTmp, 'modes', 'tr');
+  mkdirSync(configDir, { recursive: true });
+  mkdirSync(modesDir, { recursive: true });
+
+  // 1. Create a profile.yml setting modes_dir to modes/tr
+  writeFileSync(
+    join(configDir, 'profile.yml'),
+    '\uFEFFlanguage:\n  modes_dir: modes/tr\n', // Starts with a UTF-8 BOM
+    'utf-8'
+  );
+
+  // 2. Create localized dummy files in modes/tr/
+  // is-ilani.md contains Turkish/Czech characters: Türkiye, Čeština
+  writeFileSync(join(modesDir, '_shared.md'), 'Shared Turkish context', 'utf-8');
+  writeFileSync(join(modesDir, 'is-ilani.md'), 'Türkiye Čeština logic', 'utf-8');
+
+  // 3. Create other required files
+  writeFileSync(join(geminiTmp, 'cv.md'), 'My CV', 'utf-8');
+  mkdirSync(join(geminiTmp, 'modes'), { recursive: true });
+  writeFileSync(join(geminiTmp, 'modes', '_profile.md'), 'My Profile', 'utf-8');
+
+  // 4. Create a mock job description file with a BOM and UTF-8 characters
+  const jdPath = join(geminiTmp, 'mock-jd.txt');
+  writeFileSync(jdPath, '\uFEFFJob in Türkiye Čeština with BOM', 'utf-8');
+
+  // Run ROOT/gemini-eval.mjs directly with cwd: geminiTmp.
+  let stdout = '';
+  let stderr = '';
+  try {
+    stdout = execFileSync(NODE, [join(ROOT, 'gemini-eval.mjs'), '--file', jdPath, '--no-save'], {
+      cwd: geminiTmp,
+      env: {
+        ...process.env,
+        GEMINI_API_KEY: 'mock-api-key-12345'
+      },
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 30000
+    });
+  } catch (err) {
+    stdout = err.stdout || '';
+    stderr = err.stderr || '';
+  }
+
+  // Assertions:
+  if (stdout.includes('Loading context files...')) {
+    pass('Gemini evaluator loads files phase started');
+  } else {
+    fail('Gemini evaluator failed to start file loading phase');
+  }
+
+  if (stdout.includes('modes/tr/_shared.md not found') || stdout.includes('modes/tr/is-ilani.md not found')) {
+    fail('Gemini evaluator failed to resolve custom modes directory or filenames');
+  } else {
+    pass('Gemini evaluator resolved custom modes directory (modes/tr/) and localized filenames (is-ilani.md)');
+  }
+
+  if (stderr.includes('API_KEY') || stderr.includes('API key')) {
+    pass('Gemini evaluator reached API phase with mock key');
+  } else {
+    fail(`Gemini evaluator failed before reaching API phase or crashed: ${stderr}`);
+  }
+} catch (e) {
+  fail(`Gemini evaluator test crashed: ${e.message}`);
+} finally {
+  if (geminiTmp && existsSync(geminiTmp)) {
+    rmSync(geminiTmp, { recursive: true, force: true });
+  }
 }
 
 await runDiscovered();
