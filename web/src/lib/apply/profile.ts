@@ -23,7 +23,13 @@ import { careerOpsRoot } from "@/lib/career-ops";
 // The user signs in THEMSELVES in a real window. career-ops never sees, types, or
 // stores a password.
 
-export type ProfileConfig = { enabled: boolean; dir: string };
+export type ProfileConfig = {
+  enabled: boolean;
+  dir: string;
+  /** The user's `profile_dir` verbatim, when it was refused for escaping the
+   *  project root and `dir` fell back to the default. Absent otherwise. */
+  dirRejected?: string;
+};
 
 /** Where the dedicated profile lives when the user has not named a directory.
  *  `.career-ops-web/` is already gitignored and already holds apply logs. */
@@ -36,6 +42,53 @@ function isObj(v: unknown): v is Record<string, unknown> {
 }
 
 /**
+ * Canonicalize `p` as far as it exists on disk.
+ *
+ * `realpathSync` throws on a path whose leaf is not created yet, which the
+ * profile directory usually is not. Resolving the deepest ancestor that DOES
+ * exist and re-joining the rest is what makes the containment check below see
+ * through a symlink, rather than being satisfied by a repo-relative spelling
+ * that points somewhere else entirely.
+ */
+function realpathAsFarAsItGoes(p: string): string {
+  let cur = path.resolve(p);
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync(cur), ...tail);
+    } catch {
+      const parent = path.dirname(cur);
+      if (parent === cur) return path.resolve(p);
+      tail.unshift(path.basename(cur));
+      cur = parent;
+    }
+  }
+}
+
+/**
+ * The directory a user-supplied `profile_dir` may actually use.
+ *
+ * Containment under the project root is the whole safety story of this feature.
+ * A DEDICATED profile is only meaningful while it cannot become the user's real
+ * one, and `profile_dir: "../../Library/Application Support/Google/Chrome"`
+ * would hand the automation every session they have anywhere. `path.resolve`
+ * does not stop that, so a value landing outside the root is refused and the
+ * default is used instead.
+ *
+ * Refused, not silently ignored: the caller gets the rejected value back so the
+ * UI can say why the path on screen is not the one in their config.
+ */
+function containedProfileDir(raw: string): { dir: string; dirRejected?: string } {
+  const root = realpathAsFarAsItGoes(careerOpsRoot());
+  const resolved = realpathAsFarAsItGoes(path.resolve(careerOpsRoot(), raw));
+  const rel = path.relative(root, resolved);
+  // rel === "" is the project root itself, which is not a place to put a
+  // browser profile either.
+  const contained = rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+  return contained ? { dir: resolved } : { dir: defaultProfileDir(), dirRejected: raw };
+}
+
+/**
  * Read the opt-in from config/profile.yml (user layer):
  *
  *   apply:
@@ -44,6 +97,9 @@ function isObj(v: unknown): v is Record<string, unknown> {
  *
  * Absent, malformed, or unreadable config all mean "off". This feature changes
  * what a browser session can see, so it must never switch itself on by accident.
+ *
+ * `profile_dir` is resolved against the project root and must stay inside it;
+ * see containedProfileDir for why, and for what happens when it does not.
  */
 export function profileConfig(): ProfileConfig {
   const file = path.join(careerOpsRoot(), "config", "profile.yml");
@@ -56,7 +112,8 @@ export function profileConfig(): ProfileConfig {
   }
   const enabled = apply.signed_in_profile === true;
   const raw = typeof apply.profile_dir === "string" ? apply.profile_dir.trim() : "";
-  return { enabled, dir: raw ? path.resolve(careerOpsRoot(), raw) : defaultProfileDir() };
+  if (!raw) return { enabled, dir: defaultProfileDir() };
+  return { enabled, ...containedProfileDir(raw) };
 }
 
 /** Whether the profile directory has been created (i.e. ever launched). Not a

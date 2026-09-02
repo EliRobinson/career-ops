@@ -16,7 +16,14 @@ import { cn } from "@/lib/cn";
 // browser. They sign in themselves in a real window; career-ops never sees a
 // password.
 
-type Status = { enabled: boolean; dir: string; exists: boolean };
+type Status = {
+  enabled: boolean;
+  dir: string;
+  exists: boolean;
+  /** Set when `apply.profile_dir` pointed outside the project and was refused,
+   *  so the path shown below is the default rather than the one they wrote. */
+  dirRejected?: string;
+};
 
 export function SignedInBrowser() {
   const [status, setStatus] = useState<Status | null>(null);
@@ -133,6 +140,14 @@ export function SignedInBrowser() {
           {opened && (
             <p className="mt-2 text-xs text-muted">
               The window is open. Sign in, then come back and close it here.
+            </p>
+          )}
+          {status.dirRejected && (
+            <p className="mt-2 text-xs text-amber-400">
+              Your <span className="font-mono">apply.profile_dir</span> (
+              <span className="font-mono break-all">{status.dirRejected}</span>) points outside the
+              career-ops folder, so it was not used. The profile must stay inside the project, which
+              is what keeps it separate from your everyday browser profile. Using the default below.
             </p>
           )}
           <p className="mt-2 break-all font-mono text-[11px] text-faint">{status.dir}</p>

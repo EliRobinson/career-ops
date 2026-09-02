@@ -336,6 +336,13 @@ cover_letter:
 #   signed_in_profile: off unless true. Default (key absent): false.
 #   profile_dir:       where that profile lives. Default (key absent):
 #                       .career-ops-web/browser-profile (gitignored).
+#                      Relative to the career-ops folder, and it must stay
+#                      inside it. A path that escapes (for example
+#                      "../../Library/Application Support/Google/Chrome") is
+#                      refused and the default is used, because pointing this
+#                      at your real browser profile is exactly what a dedicated
+#                      profile exists to prevent. The web Config page tells you
+#                      when a value was refused.
 #
 # apply:
 #   signed_in_profile: false

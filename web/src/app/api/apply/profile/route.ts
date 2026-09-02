@@ -72,8 +72,8 @@ function setSignedInProfile(value: boolean): void {
 }
 
 export async function GET() {
-  const { enabled, dir } = profileConfig();
-  return Response.json({ enabled, dir, exists: profileExists(dir) });
+  const { enabled, dir, dirRejected } = profileConfig();
+  return Response.json({ enabled, dir, exists: profileExists(dir), dirRejected });
 }
 
 export async function POST(req: Request) {
@@ -84,7 +84,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "bad json" }, { status: 400 });
   }
 
-  const { enabled, dir } = profileConfig();
+  const { enabled, dir, dirRejected } = profileConfig();
 
   if (body.action === "close") {
     await closePersistentContext();
@@ -101,7 +101,7 @@ export async function POST(req: Request) {
     // Turning it off should not leave the profile browser running with a live
     // session attached to a feature the user just disabled.
     if (!want) await closePersistentContext();
-    return Response.json({ ok: true, enabled: want, dir, exists: profileExists(dir) });
+    return Response.json({ ok: true, enabled: want, dir, exists: profileExists(dir), dirRejected });
   }
 
   if (body.action !== "open") {
