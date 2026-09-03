@@ -169,3 +169,28 @@ test("jdMarkdown: the heading adapts to which of company/role the user actually 
   // Neither
   assert.match(jdMarkdown(base), /^# Job description\n/);
 });
+
+test("slug: a long run of separators is handled in linear time", () => {
+  // Given a company field that is nothing but separators, which is the input
+  // shape an anchored `-+` trim backtracks on (CodeQL js/polynomial-redos).
+  // The company and role are typed straight into the Add job dialog, so this
+  // string is caller-controlled.
+  const pathological = `${"-".repeat(60_000)}x`;
+
+  const started = Date.now();
+  const out = slug(pathological, 40);
+  const elapsed = Date.now() - started;
+
+  // Then it is fast and correct. The bound is deliberately loose: it is here to
+  // catch a return to quadratic trimming, not to measure this machine.
+  assert.ok(elapsed < 1000, `slug took ${elapsed}ms on a 60k separator run`);
+  assert.equal(out, "x");
+});
+
+test("slug: trimming is exact at both ends and after truncation", () => {
+  assert.equal(slug("---acme---"), "acme");
+  assert.equal(slug("!!!"), "");
+  assert.equal(slug("-"), "");
+  // Truncation must not leave the stem ending on a separator
+  assert.equal(slug("abcdefghij klmnopqrst uvwxyz", 11), "abcdefghij");
+});
