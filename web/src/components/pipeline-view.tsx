@@ -149,7 +149,7 @@ export function PipelineView({
             onClick={() => setAddOpen(true)}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:border-brand/40 hover:text-brand max-sm:min-h-[44px]"
           >
-            <Plus className="size-4" /> Add job URL
+            <Plus className="size-4" /> Add job
           </button>
         </div>
       </div>
@@ -305,10 +305,11 @@ function InboxEmpty({ count, filtered, onAdd }: { count: number; filtered: boole
               <Compass className="size-4" /> Run your first free scan <ArrowRight className="size-4" />
             </Link>
             <p className="mx-auto mt-4 max-w-sm text-xs text-muted">
-              Already have a link?{" "}
+              Already have a posting?{" "}
               <button type="button" onClick={onAdd} className="font-medium text-brand underline-offset-2 hover:underline">
-                Add a job URL
-              </button>
+                Add a job
+              </button>{" "}
+              from a link, pasted text, or a file.
             </p>
             <p className="mx-auto mt-2 max-w-sm text-xs text-faint">
               Prefer the terminal? Run <code className="rounded bg-surface-hover px-1 py-0.5 font-mono">career-ops scan</code>, or add job URLs to{" "}

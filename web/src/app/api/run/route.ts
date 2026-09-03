@@ -15,6 +15,7 @@ import { evaluateRunOutcome } from "@/lib/run-outcome.mjs";
 import { createCvEnvelopeFilter, type CvEnvelope } from "@/lib/cv-envelope.mjs";
 import { buildPrompt, isShellSafeCompanyName } from "@/lib/run-prompts.mjs";
 import { normalizeJobUrl } from "@/lib/job-url.mjs";
+import { isJdRef, jdRefPath } from "@/lib/jd-source.mjs";
 import { claudeCliArgs } from "@/lib/claude-invocation.mjs";
 import { acquireTrackerWrite, releaseTrackerWrite } from "@/lib/core/run-registry";
 
@@ -70,7 +71,22 @@ type KindSpec = {
  * /jobs/view page is an authwall for a headless agent, so the agent reads a
  * public mirror while the report and tracker record the canonical link.
  */
-function prepareEvaluate(input: string): PrepareResult {
+function prepareEvaluate(input: string, ctx: PrepareContext): PrepareResult {
+  // A `local:jds/…` reference is the other thing an evaluation can run on: a JD
+  // the user pasted or uploaded, archived under jds/ by /api/jd (see
+  // jd-source.mjs). There is nothing to normalize — the reference is already
+  // canonical and isJdRef has already rejected anything that could escape the
+  // directory — but the file has to still be there. It can be gone: jds/ is a
+  // user-layer directory the user is free to prune, and an inbox row written
+  // weeks ago outlives the file it points at. Caught here, that is a 400 naming
+  // the file; uncaught, the agent reads nothing, scores nothing, and writes a
+  // confident report about it.
+  if (isJdRef(input)) {
+    if (!fs.existsSync(path.join(ctx.root, jdRefPath(input)))) {
+      return { ok: false, error: `That job description is gone from ${jdRefPath(input)}. Paste or upload it again.` };
+    }
+    return { ok: true, input };
+  }
   const normalized = normalizeJobUrl(input);
   if (!normalized.ok) return { ok: false, error: normalized.error };
   return { ok: true, input: normalized.url, fetchUrl: normalized.fetchUrl };
