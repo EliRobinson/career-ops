@@ -59,12 +59,26 @@ const SAFE_FILENAME = /^[a-z0-9][a-z0-9._-]*\.md$/;
  * @returns {string}
  */
 export function slug(s, max = 40) {
-  return String(s ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, max)
-    .replace(/-+$/g, "");
+  // One linear pass to collapse, then index trimming rather than /^-+|-+$/.
+  // The company and role are typed by the user, so an anchored `-+` run against
+  // them is a polynomial-backtracking input the caller controls (CodeQL
+  // js/polynomial-redos). Scanning from each end is provably linear and says
+  // what it does.
+  return trimHyphens(trimHyphens(String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-")).slice(0, max));
+}
+
+/**
+ * Drop leading and trailing "-" from an already-collapsed slug. O(n), no regex.
+ *
+ * @param {string} s
+ * @returns {string}
+ */
+function trimHyphens(s) {
+  let start = 0;
+  let end = s.length;
+  while (start < end && s[start] === "-") start++;
+  while (end > start && s[end - 1] === "-") end--;
+  return s.slice(start, end);
 }
 
 /**
