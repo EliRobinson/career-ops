@@ -53,6 +53,7 @@ export function ReportView({
   app,
   report,
   canDelete = false,
+  pdfReadyFromIndex = false,
 }: {
   id: string;
   app: Application | null;
@@ -61,6 +62,7 @@ export function ReportView({
    *  the raw .md filename is a dev artifact, not header content. */
   file?: string | null;
   canDelete?: boolean;
+  pdfReadyFromIndex?: boolean;
 }) {
   const meta = report ? parseReport(report) : null;
   const field = (label: string) => meta?.fields.find((f) => f.label === label)?.value;
@@ -72,6 +74,7 @@ export function ReportView({
   // Recorded by linkedin-apply.mjs once resolved, so the Apply button can skip
   // resolution on every later visit.
   const applyUrl = field("Apply URL");
+  const pdfReady = (app?.pdf ?? "").includes("✅") || pdfReadyFromIndex;
   const company = app ? companyPresentation(app) : null;
 
   return (
@@ -104,13 +107,13 @@ export function ReportView({
           })()}
           {meta?.legitimacy && <Badge tone={legitimacyTone(meta.legitimacy)}>{meta.legitimacy}</Badge>}
           {app && <StatusSelect n={id} current={app.status} />}
-          <GeneratePdfButton n={id} company={app?.company ?? meta?.title ?? id} pdfReady={(app?.pdf ?? "").includes("✅")} />
+          <GeneratePdfButton n={id} company={app?.company ?? meta?.title ?? id} pdfReady={pdfReady} />
           <ApplyButton
             n={id}
             url={url && url.startsWith("http") ? url : undefined}
             applyUrl={applyUrl && applyUrl.startsWith("http") ? applyUrl : undefined}
             company={app?.company ?? meta?.title ?? id}
-            pdfReady={(app?.pdf ?? "").includes("✅")}
+            pdfReady={pdfReady}
           />
         </div>
 
