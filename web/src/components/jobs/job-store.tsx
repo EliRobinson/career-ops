@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { scoreTone } from "@/lib/format";
 import { normalizeJobUrl, companyFromJobUrl } from "@/lib/job-url.mjs";
+import { isJdRef } from "@/lib/jd-source.mjs";
 import { resolveCliId } from "@/lib/cli-config.mjs";
 
 export type JobStep = { kind: "tool" | "status"; label: string; ts: number };
@@ -229,6 +230,23 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
   // for others" again. Title default lives here only.
   const startEvaluate = useCallback(
     (opts: StartEvaluateOpts): string | null => {
+      // A `local:jds/…` reference identifies a JD the user pasted or uploaded
+      // rather than a live posting (see jd-source.mjs). It is already canonical,
+      // so it skips normalization entirely — passing it through normalizeJobUrl
+      // would fail it as "not a URL" and error the job before it started, which
+      // is what happens to every inbox row written from a pasted JD as well as
+      // to the Add job dialog's own launches.
+      if (isJdRef(opts.url)) {
+        return startJob({
+          title: opts.title || "Evaluate · pasted job description",
+          subtitle: opts.subtitle,
+          kind: "evaluate",
+          input: opts.url,
+          page: opts.page,
+          batchId: opts.batchId,
+        });
+      }
+
       const normalized = normalizeJobUrl(opts.url);
 
       if (!normalized.ok) {

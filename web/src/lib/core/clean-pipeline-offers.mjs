@@ -16,6 +16,7 @@
  */
 
 import { normalizeJobUrl } from "../job-url.mjs";
+import { isJdRef } from "../jd-source.mjs";
 
 /**
  * @typedef {Object} CleanPipelineOffer
@@ -38,6 +39,24 @@ export function cleanPipelineOffers(offers) {
   const out = [];
   for (const o of offers ?? []) {
     if (!o || typeof o.url !== "string") continue;
+    // A `local:jds/…` reference is a posting with no URL — a JD the user pasted
+    // or uploaded, archived under jds/ (see jd-source.mjs). It is already
+    // canonical (its filename is a hash of the JD's own text), it is validated
+    // strictly enough to be joined onto a path, and normalizeJobUrl would refuse
+    // it for the same reason it refuses file: and javascript:. So it passes
+    // through here instead of being dropped, and the row it produces in
+    // data/pipeline.md is the form modes/pipeline.md already reads.
+    if (isJdRef(o.url)) {
+      out.push({
+        url: o.url,
+        company: o.company || "",
+        title: o.title || "",
+        location: o.location || "",
+        source: o.source || "pasted-jd",
+        note: o.note || "",
+      });
+      continue;
+    }
     const normalized = normalizeJobUrl(o.url);
     if (!normalized.ok) continue;
     out.push({
