@@ -18,7 +18,14 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isSensitiveQuestion, sensitiveCategory, SENSITIVE_PATTERNS } from "../../src/lib/apply/sensitive-questions.mjs";
+import {
+  canonicalDriveAnswers,
+  isSensitiveQuestion,
+  prepareFillAnswers,
+  sanitizePrefillAnswers,
+  sensitiveCategory,
+  SENSITIVE_PATTERNS,
+} from "../../src/lib/apply/sensitive-questions.mjs";
 
 /** Real phrasings, taken from the shapes application forms actually use. */
 const MUST_REFUSE = [
@@ -29,23 +36,28 @@ const MUST_REFUSE = [
   ["work-authorization", "Are you legally authorized to work in the United States?"],
   ["work-authorization", "Do you have the right to work in Germany?"],
   ["work-authorization", "Please confirm your eligibility to work in this location."],
+  ["work-authorization", "Are you legally permitted to work in the United States?"],
   ["work-authorization", "Employment authorisation status?"],
   ["salary", "What are your salary expectations for this role?"],
   ["salary", "Desired compensation"],
   ["salary", "What is your current pay?"],
   ["salary", "Expected hourly rate"],
+  ["salary", "What hourly wage are you seeking?"],
   ["demographic", "What is your gender?"],
   ["demographic", "Do you identify as a protected veteran?"],
   ["demographic", "Please self-identify your race and ethnicity."],
+  ["demographic", "Are you Hispanic or Latino?"],
   ["demographic", "Do you have a disability?"],
   ["demographic", "What is your date of birth?"],
   ["demographic", "Do you require a reasonable accommodation?"],
   ["legal", "Have you ever been convicted of a felony?"],
+  ["legal", "Have you ever pleaded guilty to an offence?"],
   ["legal", "Are you willing to undergo a background check?"],
   ["legal", "Do you hold an active security clearance?"],
   ["legal", "Are you bound by a non-compete agreement?"],
   ["consent", "I agree to the privacy policy and terms of service."],
   ["consent", "I consent to the processing of my data under GDPR."],
+  ["consent", "I acknowledge the changes in terms and conditions."],
   // A bare "Terms *" checkbox, which the apply flow's original consent regex
   // caught with a bare `terms`. This category has to stay a superset of it.
   ["consent", "Terms *"],
@@ -59,6 +71,7 @@ const MUST_ALLOW = [
   "Tell us about a time you disagreed with a decision and what you did.",
   "How do you approach code review on a team of eight?",
   "What would your first 90 days look like?",
+  "Describe a race condition you debugged in production.",
   // "in terms of" is ordinary English and must not be read as a consent label,
   // even though the consent category has to keep the bare word "terms" to cover
   // a checkbox labelled only "Terms *".
@@ -96,6 +109,54 @@ test("a whole word is required, so an innocent substring is not a refusal", () =
   assert.equal(sensitiveCategory("What is on the agenda for your first week?"), null);
   assert.equal(sensitiveCategory("Describe how you manage a large backlog."), null);
   assert.equal(sensitiveCategory("How do you leverage telemetry?"), null);
+});
+
+test("prefill sanitization uses the authoritative field label, not planner metadata", () => {
+  const fields = [
+    { id: "f-visa", label: "Visa sponsorship" },
+    { id: "f-why", label: "Why do you want this role?" },
+  ];
+  const safe = sanitizePrefillAnswers(fields, {
+    "f-visa": { value: "No", needs_confirmation: false },
+    "f-why": { value: "A grounded answer", needs_confirmation: false },
+    "f-unknown": { value: "must not reach the UI", needs_confirmation: false },
+  });
+
+  assert.deepEqual(safe, {
+    "f-visa": { value: "", needs_confirmation: true },
+    "f-why": { value: "A grounded answer", needs_confirmation: false },
+  });
+});
+
+test("agent answers are resolved by authoritative ids and exclude sensitive fields", () => {
+  const fields = [
+    { id: "f-visa", label: "Visa sponsorship", type: "select" },
+    { id: "f-why", label: "Why do you want this role?", type: "textarea" },
+    { id: "f-cv", label: "Resume", type: "file" },
+  ];
+  const safe = canonicalDriveAnswers(fields, [
+    // Relabelling the sensitive field must not bypass the server policy.
+    { fieldId: "f-visa", label: "Portfolio", value: "No" },
+    { fieldId: "f-why", label: "Visa sponsorship", value: "A grounded answer" },
+    { fieldId: "f-cv", label: "Why us?", value: "resume.pdf" },
+    { fieldId: "f-missing", label: "Why us?", value: "unknown" },
+  ]);
+
+  assert.deepEqual(safe, [{ label: "Why do you want this role?", value: "A grounded answer" }]);
+});
+
+test("deterministic fill uses session fields and treats unconfirmed sensitive values as skipped", () => {
+  const fields = [
+    { id: "f-visa", label: "Visa sponsorship", type: "select" },
+    { id: "f-why", label: "Why do you want this role?", type: "textarea" },
+  ];
+  const prepared = prepareFillAnswers(fields, { "f-visa": "No", "f-why": "A grounded answer" });
+
+  assert.deepEqual(prepared, {
+    answers: { "f-why": "A grounded answer" },
+    skipped: [{ fieldId: "f-visa", label: "Visa sponsorship" }],
+  });
+  assert.deepEqual(prepareFillAnswers(fields, { "f-visa": "No" }, ["f-visa"]).skipped, []);
 });
 
 test("no pattern carries the g flag", () => {

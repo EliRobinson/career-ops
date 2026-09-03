@@ -175,7 +175,7 @@ export function ApplyView() {
                   needs={!!a.meta[f.id]?.needsConfirmation}
                   index={i}
                   drafting={prefilling}
-                  onChange={(v) => a.setAnswer(f.id, v)}
+                  onChange={(v) => a.setHumanAnswer(f.id, v)}
                 />
               </div>
             ))}
