@@ -150,37 +150,64 @@ function decodeXmlEntities(s) {
 }
 
 /**
+ * Every construct in a .docx this reader cares about, as one alternation:
+ * the text of a run (`<w:t>`), the two inline break elements, and the three
+ * closing tags that carry structure.
+ */
+const DOCX_TOKEN = /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:(tab|br)\b[^>]*?\/?>|<\/w:(p|tc|tr)>/g;
+
+/** What each structural token contributes to the plain text. */
+const DOCX_SEPARATOR = { tab: "\t", br: "\n", p: "\n", tc: "\t", tr: "\n" };
+
+/**
  * WordprocessingML -> plain text.
  *
- * Paragraph and line-break boundaries are turned into real newlines BEFORE the
- * tags are stripped, because they are the only thing carrying a JD's structure:
- * strip first and every requirement bullet runs into the next one, which is
- * exactly the shape that makes an evaluation misread a list of five requirements
- * as one sentence. Tab elements become tabs for the same reason.
+ * Reads the text OUT of `<w:t>` runs rather than stripping tags off the whole
+ * document, which is both the correct reading of the format and the only one
+ * that is safe. A single-pass `replace(/<[^>]*>/g, "")` over attacker-supplied
+ * markup is incomplete sanitization by construction (CodeQL
+ * js/incomplete-multi-character-sanitization): nested angle brackets survive one
+ * pass, and this text goes on to be written to a file, rendered in the report
+ * view, and read into an agent's context. Only what the format says is text
+ * becomes text, so nothing else can ride along.
+ *
+ * Structure is preserved because it is the only thing separating one
+ * requirement from the next: strip it and a list of five requirements reads as
+ * one sentence, which is exactly the shape that makes an evaluation misjudge
+ * the role. Paragraph and row ends become newlines, tabs and cell ends become
+ * tabs.
  *
  * @param {string} xml
  * @returns {string}
  */
 export function docxXmlToText(xml) {
-  const withBreaks = String(xml ?? "")
-    .replace(/<w:tab\b[^>]*\/?>/g, "\t")
-    .replace(/<w:br\b[^>]*\/?>/g, "\n")
-    // Every table cell wraps its text in a <w:p> of its own, so the generic
-    // paragraph rule below would end each cell with a newline and turn a
-    // two-column comp table into "Level\n\tSenior". The cell and row boundaries
-    // are the real separators inside a table, so the paragraph break that
-    // immediately precedes one is dropped rather than doubled up.
-    .replace(/<\/w:p>\s*(?=<\/w:tc>|<\/w:tr>)/g, "")
-    .replace(/<\/w:p>/g, "\n")
-    // A table cell boundary reads as a column break, not a word boundary.
-    .replace(/<\/w:tc>/g, "\t")
-    .replace(/<\/w:tr>/g, "\n");
-  const text = decodeXmlEntities(withBreaks.replace(/<[^>]*>/g, ""));
-  return text
-    .replace(/\r\n?/g, "\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  /** @type {Array<{kind: "text"|"tab"|"br"|"p"|"tc"|"tr", value?: string}>} */
+  const tokens = [];
+  for (const m of String(xml ?? "").matchAll(DOCX_TOKEN)) {
+    if (m[1] !== undefined) tokens.push({ kind: "text", value: decodeXmlEntities(m[1]) });
+    else tokens.push({ kind: m[2] ?? m[3] });
+  }
+
+  let out = "";
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.kind === "text") {
+      out += t.value;
+      continue;
+    }
+    // Every table cell wraps its text in a <w:p> of its own, so the plain
+    // paragraph rule would end each cell with a newline and turn a two-column
+    // comp table into "Level\n\tSenior". Inside a table the cell and row
+    // boundaries are the real separators, so a paragraph that ends one is not
+    // also its own line.
+    if (t.kind === "p") {
+      const next = tokens[i + 1]?.kind;
+      if (next === "tc" || next === "tr") continue;
+    }
+    out += DOCX_SEPARATOR[t.kind];
+  }
+
+  return out.replace(/\r\n?/g, "\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 /**
