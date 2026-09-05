@@ -3,7 +3,7 @@ import { extractForm, type ApplyField, type ExtractedForm } from "./extract";
 import { parseGreenhouse, fetchGreenhouseSchema } from "./greenhouse";
 import { statusBlock, dismissConsent, tryApplyTrigger, dropNewTabs, classifyEmpty, captchaWarning, multiStepInfo, verifyFill, type ApplyIssue } from "./diagnose";
 import { agentInterpretForm } from "./agent-interpret";
-import { isSensitiveQuestion } from "./sensitive-questions.mjs";
+import { prepareFillAnswers } from "./sensitive-questions.mjs";
 
 /** The frame with the most interactive controls — where the agentic interpreter
  *  should look when deterministic extraction found nothing usable. */
@@ -348,7 +348,7 @@ export async function closeSession(id: string): Promise<void> {
   if (SESSIONS.size === 0) scheduleIdleClose();
 }
 
-export type FillStep = { fieldId: string; label: string; ok: boolean; thumb?: string };
+export type FillStep = { fieldId: string; label: string; ok: boolean; skipped?: boolean; thumb?: string };
 
 /** True for a file field that wants the candidate's résumé/CV (vs. cover letter,
  *  portfolio, or a generic attachment we leave for the user). */
@@ -362,12 +362,17 @@ function isResumeField(f: ApplyField): boolean {
 export async function fillSession(
   id: string,
   answers: Record<string, string>,
-  fieldsMeta: ApplyField[],
-  cvPath?: string,
+  options: { confirmedSensitiveFieldIds?: readonly string[]; cvPath?: string } = {},
 ): Promise<{ steps: FillStep[]; navigated: boolean; issues: ApplyIssue[] }> {
   const s = SESSIONS.get(id);
   if (!s) throw new Error("apply session not found (it may have expired)");
+  const { confirmedSensitiveFieldIds = [], cvPath } = options;
+  const fieldsMeta = s.fields;
   const byId = new Map(fieldsMeta.map((f) => [f.id, f]));
+  const prepared = prepareFillAnswers(fieldsMeta, answers, confirmedSensitiveFieldIds);
+  const answersToVerify: Record<string, string> = Object.fromEntries(
+    Object.entries(prepared.answers).filter(([fid]) => byId.get(fid)?.type !== "file"),
+  );
   const steps: FillStep[] = [];
   // Belt-and-suspenders: if filling ever navigates the page (i.e. something got
   // submitted), the URL path changes. We never submit by construction, but we
@@ -413,30 +418,15 @@ export async function fillSession(
     }
   }
 
-  for (const [fid, raw] of Object.entries(answers)) {
+  for (const skipped of prepared.skipped) {
+    steps.push({ fieldId: skipped.fieldId, label: `${skipped.label} (yours to answer)`, ok: false, skipped: true, thumb: undefined });
+  }
+
+  for (const [fid, raw] of Object.entries(prepared.answers)) {
     const meta = byId.get(fid);
     const value = (raw ?? "").toString();
     if (!meta || value === "") continue;
     if (meta.type === "file") continue; // handled above (CV) — never auto-fill other uploads
-    // Defense-in-depth: NEVER put a generated answer into a legal, visa,
-    // work-authorization, salary or demographic field. The human answers those.
-    //
-    // The planner is told to refuse them and to return needs_confirmation, but
-    // that is the planner agreeing to refuse. A planner that instead returns a
-    // fluent, confident, entirely invented sentence about the candidate's
-    // immigration status sets needs_confirmation false, and the only thing then
-    // standing between that value and a real employer's form was the
-    // `value === ""` check above. An invented answer is not an empty one.
-    //
-    // Was a regex matching consent-worded CHECKBOX labels only. The same
-    // reasoning covers every field type, and the shared predicate states it once
-    // so the policy has one home instead of one per call site. Consent wording
-    // is still covered: it is the predicate's `consent` category, unchanged in
-    // meaning.
-    if (isSensitiveQuestion(meta.label || "")) {
-      steps.push({ fieldId: fid, label: `${meta.label} (yours to answer)`, ok: false, thumb: undefined });
-      continue;
-    }
     let ok = false;
     let gaveUp = false;
     try {
@@ -525,7 +515,7 @@ export async function fillSession(
   })();
   // Read the real form back: did every answer actually land? any validation
   // error? — so we warn the user about silent divergence before the handoff.
-  const issues = await verifyFill(s.frame, fieldsMeta, answers).catch(() => [] as ApplyIssue[]);
+  const issues = await verifyFill(s.frame, fieldsMeta, answersToVerify).catch(() => [] as ApplyIssue[]);
   return { steps, navigated: endPath !== startPath, issues };
 }
 

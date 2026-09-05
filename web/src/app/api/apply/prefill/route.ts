@@ -6,6 +6,7 @@ import { getSession } from "@/lib/apply/session";
 import { buildAnswerPrompt } from "@/lib/apply/answer-prompt.mjs";
 import { runPlanner } from "@/lib/apply/planner";
 import { extractJsonObject } from "@/lib/extract-json-object.mjs";
+import { sanitizePrefillAnswers } from "@/lib/apply/sensitive-questions.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -100,9 +101,11 @@ export async function POST(req: Request) {
           result.buf.slice(-300),
         );
       }
-      const count = Object.keys(obj).length;
-      log(`Parsed ${count} answers${truncated ? " (RECOVERED from truncated output — some fields may be missing)" : ""}`);
-      emit({ t: "done", answers: obj, truncated, count });
+      const answers = sanitizePrefillAnswers(s.fields, obj);
+      const count = Object.keys(answers).length;
+      const removed = Object.keys(obj).length - count;
+      log(`Parsed ${count} usable answers${removed > 0 ? ` (${removed} unknown field${removed > 1 ? "s" : ""} dropped)` : ""}${truncated ? " (RECOVERED from truncated output — some fields may be missing)" : ""}`);
+      emit({ t: "done", answers, truncated, count });
       controller.close();
     },
   });

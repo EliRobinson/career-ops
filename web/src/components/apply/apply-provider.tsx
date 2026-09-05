@@ -4,8 +4,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ApplyField } from "@/lib/apply/extract";
 import type { ApplyIssue, DriveStep } from "@/lib/apply/issue";
 import { resolveLateSession } from "@/lib/apply/exit.mjs";
+import { isSensitiveQuestion } from "@/lib/apply/sensitive-questions.mjs";
 
-export type FillStep = { fieldId: string; label: string; ok: boolean; thumb?: string };
+export type FillStep = { fieldId: string; label: string; ok: boolean; skipped?: boolean; thumb?: string };
 type Meta = { needsConfirmation?: boolean };
 type Status = "idle" | "opening" | "driving" | "prefilling" | "ready" | "filling" | "done" | "error";
 
@@ -30,6 +31,7 @@ type ApplyCtx = {
   open: (url: string, opts?: { prefill?: boolean; company?: string; n?: string; from?: string }) => Promise<void>;
   prefill: () => Promise<void>;
   setAnswer: (idOrLabel: string, value: string) => void;
+  setHumanAnswer: (idOrLabel: string, value: string) => void;
   fill: () => Promise<void>;
   agentFill: () => Promise<void>;
   reset: () => void;
@@ -55,6 +57,16 @@ function cliId(): string | null {
   } catch {
     return null;
   }
+}
+
+function resolveField(fields: ApplyField[], idOrLabel: string): ApplyField | undefined {
+  const key = idOrLabel.toLowerCase();
+  if (!key) return undefined;
+  return (
+    fields.find((x) => x.id === idOrLabel) ||
+    fields.find((x) => x.label.toLowerCase().includes(key)) ||
+    fields.find((x) => key.includes(x.label.toLowerCase()) && x.label.length > 2)
+  );
 }
 
 export function ApplyProvider({ children }: { children: React.ReactNode }) {
@@ -92,6 +104,9 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
   // ready — driven by an effect (not a fragile setTimeout) so it can't race the
   // session response or a navigation.
   const pendingPrefill = useRef(false);
+  // Sensitive values are fillable only after a direct edit in the proxy UI.
+  // Assistant/planner writes use setAnswer and never add this confirmation.
+  const humanConfirmedSensitive = useRef<Set<string>>(new Set());
 
   // Stream the agentic drive (the AI reaching the form live) and finalize the
   // session when it succeeds → fields ready → auto-prefill fires.
@@ -162,6 +177,7 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
     setError("");
     setFields([]);
     setAnswers({});
+    humanConfirmedSensitive.current.clear();
     setMeta({});
     setSteps([]);
     setShots([]);
@@ -227,6 +243,7 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
         a[id] = v?.value ?? "";
         m[id] = { needsConfirmation: !!v?.needs_confirmation };
       }
+      humanConfirmedSensitive.current.clear();
       setAnswers(a);
       setMeta(m);
     };
@@ -293,12 +310,26 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
 
   const setAnswer = useCallback((idOrLabel: string, value: string) => {
     const fs = fieldsRef.current;
-    const key = idOrLabel.toLowerCase();
-    const f =
-      fs.find((x) => x.id === idOrLabel) ||
-      fs.find((x) => x.label.toLowerCase().includes(key)) ||
-      fs.find((x) => key.includes(x.label.toLowerCase()) && x.label.length > 2);
-    if (f) setAnswers((prev) => ({ ...prev, [f.id]: value }));
+    const f = resolveField(fs, idOrLabel);
+    if (!f) return;
+    if (isSensitiveQuestion(f.label || "")) {
+      // A programmatic/assistant edit supersedes any previous human
+      // confirmation; the user must review and edit it again before fill.
+      humanConfirmedSensitive.current.delete(f.id);
+      setMeta((prev) => ({ ...prev, [f.id]: { ...prev[f.id], needsConfirmation: true } }));
+    }
+    setAnswers((prev) => ({ ...prev, [f.id]: value }));
+  }, []);
+
+  const setHumanAnswer = useCallback((idOrLabel: string, value: string) => {
+    const f = resolveField(fieldsRef.current, idOrLabel);
+    if (!f) return;
+    if (isSensitiveQuestion(f.label || "")) {
+      if (value.trim()) humanConfirmedSensitive.current.add(f.id);
+      else humanConfirmedSensitive.current.delete(f.id);
+      setMeta((prev) => ({ ...prev, [f.id]: { ...prev[f.id], needsConfirmation: true } }));
+    }
+    setAnswers((prev) => ({ ...prev, [f.id]: value }));
   }, []);
 
   const fill = useCallback(async () => {
@@ -307,7 +338,7 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
     setStatus("filling");
     setSteps([]);
     try {
-      const r = await fetch("/api/apply/fill", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: sessionId.current, answers, fields, handoff: true, company: companyRef.current, application: nRef.current }) });
+      const r = await fetch("/api/apply/fill", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: sessionId.current, answers, confirmedSensitiveFieldIds: Array.from(humanConfirmedSensitive.current), handoff: true, company: companyRef.current, application: nRef.current }) });
       const d = await r.json();
       // Also stops the escalation below from starting an agent drive on a
       // session the user has already walked away from.
@@ -329,8 +360,15 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
       setStatus("done");
       // ESCALATION ("si no va, full agente"): if deterministic fill clearly
       // didn't land (most fields failed / mismatched), let the agent fill it.
-      const okCount = (d.steps ?? []).filter((s: FillStep) => s.ok).length;
-      const total = (d.steps ?? []).length;
+      const actionable = (d.steps ?? []).filter((s: FillStep) => {
+        const field = fieldsRef.current.find((f) => f.id === s.fieldId);
+        return !s.skipped && field && !isSensitiveQuestion(field.label || "");
+      });
+      if ((d.steps ?? []).some((s: FillStep) => !s.ok && !s.skipped && isSensitiveQuestion(fieldsRef.current.find((f) => f.id === s.fieldId)?.label || ""))) {
+        setIssues((prev) => [...prev, { level: "warn", code: "sensitive-manual-fill", message: "A personal answer could not be filled. Enter it directly on the employer's form; it will not be passed to the AI agent." }]);
+      }
+      const okCount = actionable.filter((s: FillStep) => s.ok).length;
+      const total = actionable.length;
       const mismatch = (d.issues ?? []).some((i: ApplyIssue) => i.code === "fill-mismatch");
       if (cliId() && total > 0 && (okCount === 0 || (mismatch && okCount < total / 2))) {
         await agentFillRef.current();
@@ -350,7 +388,9 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
     const gen = generation.current;
     const fs = fieldsRef.current;
     const a = answersRef.current;
-    const ans = fs.filter((f) => f.type !== "file" && (a[f.id] || "").trim()).map((f) => ({ label: f.label || f.id, value: a[f.id] }));
+    const ans = fs
+      .filter((f) => f.type !== "file" && !isSensitiveQuestion(f.label || "") && (a[f.id] || "").trim())
+      .map((f) => ({ fieldId: f.id, value: a[f.id] }));
     setDriveSteps([]);
     setError("");
     setStatus("filling");
@@ -409,6 +449,7 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
     companyRef.current = "";
     nRef.current = "";
     pendingPrefill.current = false;
+    humanConfirmedSensitive.current.clear();
     setStatus("idle");
     setUrl("");
     setTitle("");
@@ -427,8 +468,8 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ status, url, title, company, n, from, fields, answers, meta, steps, shots, prefillLog, issues, driveSteps, error, open, prefill, setAnswer, fill, agentFill, reset }),
-    [status, url, title, company, n, from, fields, answers, meta, steps, shots, prefillLog, issues, driveSteps, error, open, prefill, setAnswer, fill, agentFill, reset],
+    () => ({ status, url, title, company, n, from, fields, answers, meta, steps, shots, prefillLog, issues, driveSteps, error, open, prefill, setAnswer, setHumanAnswer, fill, agentFill, reset }),
+    [status, url, title, company, n, from, fields, answers, meta, steps, shots, prefillLog, issues, driveSteps, error, open, prefill, setAnswer, setHumanAnswer, fill, agentFill, reset],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

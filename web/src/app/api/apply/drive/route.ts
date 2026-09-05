@@ -1,6 +1,7 @@
 import { getSession, finalizeDrivenSession, extractCurrent, isApplicationFormFn, handoffSession } from "@/lib/apply/session";
 import { driveSession } from "@/lib/apply/drive";
 import { classifyEmpty } from "@/lib/apply/diagnose";
+import { canonicalDriveAnswers } from "@/lib/apply/sensitive-questions.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,7 +11,7 @@ export const maxDuration = 300;
 // REACH a fillable application form (the user watches each step live), then we
 // extract + finalize. NEVER submits (enforced in driveSession).
 export async function POST(req: Request) {
-  let body: { sessionId?: string; cliId?: string; goal?: "reach" | "full"; answers?: { label: string; value: string }[] };
+  let body: { sessionId?: string; cliId?: string; goal?: "reach" | "full"; answers?: { fieldId?: string; value?: string }[] };
   try {
     body = await req.json();
   } catch {
@@ -19,6 +20,10 @@ export async function POST(req: Request) {
   const { sessionId, cliId = "", goal = "reach", answers } = body;
   const s = sessionId ? getSession(sessionId) : undefined;
   if (!s) return Response.json({ error: "apply session not found (it may have expired)" }, { status: 404 });
+  // The agent gets only answers whose ids match the fields captured in this
+  // server-side session. Labels supplied by the browser are deliberately not
+  // accepted as identity, and sensitive/upload fields never reach its prompt.
+  const safeAnswers = goal === "full" ? canonicalDriveAnswers(s.fields, answers) : undefined;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -40,7 +45,7 @@ export async function POST(req: Request) {
           }
         };
         const budget = goal === "full" ? 16 : 7;
-        const result = await driveSession(page, cliId, goal, isFormReady, (step) => emit({ t: "step", ...step }), budget, answers);
+        const result = await driveSession(page, cliId, goal, isFormReady, (step) => emit({ t: "step", ...step }), budget, safeAnswers);
 
         if (goal === "full") {
           // The agent filled the real form — bring it to the front for the human
