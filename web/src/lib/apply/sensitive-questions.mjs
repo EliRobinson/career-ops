@@ -55,7 +55,7 @@ export const SENSITIVE_PATTERNS = [
     // forms spell it a dozen ways ("authorised", "authorization", "authorized").
     category: "work-authorization",
     pattern:
-      /(\bwork authoris|\bwork authoriz|\bemployment authoris|\bemployment authoriz|\bauthoris(?:ed|ation) to work|\bauthoriz(?:ed|ation) to work|\b(?:legally )?(?:able|entitled|authoris|authoriz|permitted|allowed) to work|\bpermission to work\b|\bright to work\b|\bwork eligib(?:le|ility)\b|\beligib(?:le|ility) to work)/i,
+      /(\bwork authoris|\bwork authoriz|\bemployment authoris|\bemployment authoriz|\bauthoris(?:ed|ation) to work|\bauthoriz(?:ed|ation) to work|\blegally (?:able|entitled|authoris|authoriz|permitted|allowed) to work|\b(?:entitled|permitted) to work|\bpermission to work\b|\bright to work\b|\bwork eligib(?:le|ility)\b|\beligib(?:le|ility) to work)/i,
   },
   {
     // Pay. "compensation" is included knowing it also catches a question about
@@ -70,7 +70,7 @@ export const SENSITIVE_PATTERNS = [
     // them. Accommodation and medical questions sit here for the same reason.
     category: "demographic",
     pattern:
-      /\b(gender|sex|race(?!\s+conditions?\b)|racial|ethnicity|ethnic|hispanic|latino|latina|latinx|disabilit(?:y|ies)|veterans?|sexual orientation|pronouns|marital status|religion|religious|date of birth|birth ?date|your age|age range|age group|how old are you|eeoc?|equal (?:employment )?opportunity|protected (?:veteran|class)|self-?identif|reasonable accommodation|medical condition|pregnan)/i,
+      /\b(gender|sex|race(?![\s\u2010-\u2015-]+conditions?\b)|racial|ethnicity|ethnic|hispanic|latino|latina|latinx|disabilit(?:y|ies)|veterans?|sexual orientation|pronouns|marital status|religion|religious|date of birth|birth ?date|your age|age range|age group|how old are you|eeoc?|equal (?:employment )?opportunity|protected (?:veteran|class)|self-?identif|reasonable accommodation|medical condition|pregnan)/i,
   },
   {
     // Background and legal history.

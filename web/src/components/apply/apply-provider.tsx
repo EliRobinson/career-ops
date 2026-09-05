@@ -243,11 +243,11 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
         a[id] = v?.value ?? "";
         m[id] = { needsConfirmation: !!v?.needs_confirmation };
       }
+      humanConfirmedSensitive.current.clear();
       setAnswers(a);
       setMeta(m);
     };
     try {
-      humanConfirmedSensitive.current.clear();
       const r = await fetch("/api/apply/prefill", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: sessionId.current, cliId: cliId() }) });
       if (generation.current !== gen) return; // left mid-prefill
       if (!r.body) {
@@ -360,7 +360,13 @@ export function ApplyProvider({ children }: { children: React.ReactNode }) {
       setStatus("done");
       // ESCALATION ("si no va, full agente"): if deterministic fill clearly
       // didn't land (most fields failed / mismatched), let the agent fill it.
-      const actionable = (d.steps ?? []).filter((s: FillStep) => !s.skipped);
+      const actionable = (d.steps ?? []).filter((s: FillStep) => {
+        const field = fieldsRef.current.find((f) => f.id === s.fieldId);
+        return !s.skipped && field && !isSensitiveQuestion(field.label || "");
+      });
+      if ((d.steps ?? []).some((s: FillStep) => !s.ok && !s.skipped && isSensitiveQuestion(fieldsRef.current.find((f) => f.id === s.fieldId)?.label || ""))) {
+        setIssues((prev) => [...prev, { level: "warn", code: "sensitive-manual-fill", message: "A personal answer could not be filled. Enter it directly on the employer's form; it will not be passed to the AI agent." }]);
+      }
       const okCount = actionable.filter((s: FillStep) => s.ok).length;
       const total = actionable.length;
       const mismatch = (d.issues ?? []).some((i: ApplyIssue) => i.code === "fill-mismatch");

@@ -38,6 +38,9 @@ const MUST_REFUSE = [
   ["work-authorization", "Please confirm your eligibility to work in this location."],
   ["work-authorization", "Are you legally permitted to work in the United States?"],
   ["work-authorization", "Employment authorisation status?"],
+  ["work-authorization", "Are you legally able to work in the UK?"],
+  ["work-authorization", "Are you entitled to work in Germany?"],
+  ["work-authorization", "Are you permitted to work in Canada?"],
   ["salary", "What are your salary expectations for this role?"],
   ["salary", "Desired compensation"],
   ["salary", "What is your current pay?"],
@@ -72,6 +75,11 @@ const MUST_ALLOW = [
   "How do you approach code review on a team of eight?",
   "What would your first 90 days look like?",
   "Describe a race condition you debugged in production.",
+  "Describe a race-condition you debugged in production.",
+  "Describe a race–condition you debugged in production.",
+  "Are you able to work in a fast-paced environment?",
+  "Are you able to work overtime when needed?",
+  "Are you allowed to work from our Berlin office?",
   // "in terms of" is ordinary English and must not be read as a consent label,
   // even though the consent category has to keep the bare word "terms" to cover
   // a checkbox labelled only "Terms *".
