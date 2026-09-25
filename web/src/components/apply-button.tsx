@@ -6,7 +6,8 @@ import { Send, Lock, Loader2, X, ExternalLink } from "lucide-react";
 import { useJobs } from "@/components/jobs/job-store";
 import { useApply } from "@/components/apply/apply-provider";
 
-// The "Apply" CTA — brand orange, paper-plane. Enabled ONLY when the tailored CV
+// The "Apply" CTA. Brand fill only when the score is at/above the apply line
+// and legitimacy is not caution (#4206). Enabled ONLY when the tailored CV
 // for THIS offer is ready (the tracker's PDF column is ✅, or a pdf worker for
 // this #n just finished). On click it opens the apply form-proxy for the offer
 // (where the user reviews and submits it themselves — never auto-submit).
@@ -39,6 +40,7 @@ export function ApplyButton({
   applyUrl,
   company,
   pdfReady,
+  quiet = false,
 }: {
   n: string;
   /** The canonical posting link (what the tracker records). */
@@ -47,6 +49,8 @@ export function ApplyButton({
   applyUrl?: string;
   company: string;
   pdfReady: boolean;
+  /** Below the apply line or a caution verdict: render as a secondary button. */
+  quiet?: boolean;
 }) {
   const router = useRouter();
   const { jobs } = useJobs();
@@ -146,8 +150,16 @@ export function ApplyButton({
         type="button"
         onClick={start}
         disabled={resolving}
-        className="inline-flex items-center justify-center gap-1.5 rounded-full bg-brand px-3.5 py-1 text-xs font-medium text-brand-foreground shadow-sm transition-colors hover:bg-brand-200 disabled:opacity-70 max-sm:min-h-[44px]"
-        title="Apply: opens the form pre-filled, you review and submit yourself"
+        className={
+          quiet
+            ? "inline-flex items-center justify-center gap-1.5 rounded-full border border-border bg-transparent px-3.5 py-1 text-xs font-medium text-muted transition-colors hover:border-foreground/20 hover:text-foreground disabled:opacity-70 max-sm:min-h-[44px]"
+            : "inline-flex items-center justify-center gap-1.5 rounded-full bg-brand px-3.5 py-1 text-xs font-medium text-brand-foreground shadow-sm transition-colors hover:bg-brand-200 disabled:opacity-70 max-sm:min-h-[44px]"
+        }
+        title={
+          quiet
+            ? "Apply: below the apply line or caution; opens the form pre-filled, you review and submit yourself"
+            : "Apply: opens the form pre-filled, you review and submit yourself"
+        }
       >
         {resolving ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
         {resolving ? "Finding the form…" : "Apply"}

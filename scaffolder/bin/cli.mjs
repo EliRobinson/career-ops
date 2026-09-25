@@ -118,9 +118,11 @@ async function main() {
   // "packageManager"); a missing pnpm is the likeliest failure here, so say
   // how to get it rather than just reporting a non-zero exit.
   console.log("\n→ Installing dependencies (pnpm install) ...");
+  let installed = true;
   try {
     execFileSync(PNPM, ["install"], { cwd: target, stdio: "inherit" });
   } catch {
+    installed = false;
     console.warn('\n! pnpm install failed — you can re-run it manually later with "pnpm install".');
     console.warn("  If pnpm is not installed:  corepack enable pnpm   (or: npm i -g pnpm)");
   }
@@ -134,9 +136,16 @@ async function main() {
   // 3. Next steps. We do NOT scaffold cv.md / profile.yml / portals.yml here:
   // their absence is what triggers the agent's conversational onboarding on
   // first launch, which sets them up far better than copying placeholders.
-  console.log(`\n✓ career-ops is ready in ${display}\n`);
-  console.log("Next steps:");
-  console.log(`  1. cd ${target}`);
+  if (installed) {
+    console.log(`\n✓ career-ops is ready in ${display}\n`);
+    console.log("Next steps:");
+    console.log(`  1. cd ${target}`);
+  } else {
+    console.log(`\n! career-ops is cloned in ${display} but NOT ready: dependencies did not install.\n`);
+    console.log("Next steps:");
+    console.log(`  1. cd ${target} && npm install   (then node doctor.mjs)`);
+    process.exitCode = 1;
+  }
 
   // Tailor the "open your AI tool" line to whatever CLI is installed.
   const detected = detectClis();

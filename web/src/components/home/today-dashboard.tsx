@@ -26,7 +26,7 @@ export function TodayDashboard({
   inbox,
 }: {
   applications: Application[];
-  inbox: InboxJob[];
+  inbox: Pick<InboxJob, "url" | "done">[];
 }) {
   const [followups, setFollowups] = useState<FollowUp[]>([]);
   const [overdue, setOverdue] = useState(0);

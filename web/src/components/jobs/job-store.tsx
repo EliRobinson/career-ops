@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { scoreTone } from "@/lib/format";
 import { normalizeJobUrl, companyFromJobUrl } from "@/lib/job-url.mjs";
 import { isJdRef } from "@/lib/jd-source.mjs";
-import { resolveCliId } from "@/lib/cli-config.mjs";
+import { resolveCliId } from "@/lib/saved-cli";
 
 export type JobStep = { kind: "tool" | "status"; label: string; ts: number };
 export type JobResult = { score: number | null; summary: string; tone: "good" | "warn" | "bad" | "muted" };
@@ -116,11 +116,24 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
       };
       setJobs((js) => [job, ...js]);
 
+      // Declared before resolveCliId() so its stale-CLI notice lands in the log
+      // sent to /api/runs/save, not only in the live job.
+      const steps: JobStep[] = [];
       (async () => {
-        // The saved engine, or the first CLI installed on this machine (resolving
-        // persists it). Only a machine with no supported CLI at all lands here as
-        // null, so the error below now means what it says.
-        const cliId = await resolveCliId();
+        // resolveCliId() validates the saved id against what is installed; a
+        // bare readSavedCliId() here would short-circuit that check and launch
+        // a run against an uninstalled CLI (#4012).
+        // A stale saved id is replaced silently otherwise — name the switch in
+        // the job log so a transient "not installed" can't rewrite the user's
+        // choice without a record.
+        const cliId = await resolveCliId((stale, replacement) => {
+          const label = replacement
+            ? `Saved CLI '${stale}' is not installed — using '${replacement}'`
+            : `Saved CLI '${stale}' is not installed`;
+          const step: JobStep = { kind: "status", label, ts: Date.now() };
+          steps.push(step);
+          patch(id, (j) => ({ ...j, steps: [...j.steps, step] }));
+        });
         if (!cliId) {
           patch(id, (j) => ({
             ...j,
@@ -135,7 +148,6 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
         let verdictLine = ""; // latched separately so the 8000-char tail can't drop it
         let doneTokens = 0; // per-run token cost, forwarded on the done event (#6)
         let doneCostUsd: number | null = null;
-        const steps: JobStep[] = [];
         const finish = (status: "done" | "error", lastLabel?: string) => {
           const result = status === "done" ? parseVerdict(verdictLine || text) : undefined;
           const cost = status === "done" && doneTokens > 0 ? { tokens: doneTokens, usd: doneCostUsd ?? undefined } : undefined;

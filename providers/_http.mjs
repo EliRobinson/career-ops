@@ -8,6 +8,7 @@ import {
   MACOS_BROWSER_LIKE_USER_AGENT,
 } from '../user-agent.mjs';
 import { providerFetchContext } from './_ip-guard.mjs';
+import { normalizeUrl } from '../url-key.mjs';
 
 export { BROWSER_LIKE_USER_AGENT, MACOS_BROWSER_LIKE_USER_AGENT };
 
@@ -27,17 +28,35 @@ async function fetchWithTimeout(url, opts = {}, consume) {
   return providerFetchContext.run({ url: String(url) }, () => fetchInContext(url, opts, consume));
 }
 
-async function fetchInContext(url, { timeoutMs = DEFAULT_TIMEOUT_MS, headers = {}, method = 'GET', body = null, redirect = 'follow' } = {}, consume) {
+// redirect defaults to 'error': a provider fetch must never follow a 3xx, or a
+// server-side redirect could point the request at a private address after the
+// ip guard already passed the original host (#4079). Callers that really need
+// to follow redirects opt in explicitly.
+async function fetchInContext(url, { timeoutMs = DEFAULT_TIMEOUT_MS, headers = {}, method = 'GET', body = null, redirect = 'error', onResponse } = {}, consume) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    // Defaults go through Headers so a caller's override wins whatever its
+    // capitalization. An object spread only replaces an identical key: a caller's
+    // 'User-Agent' sat beside the default 'user-agent', and fetch JOINED the two
+    // into one comma-separated value instead of replacing it.
+    const requestHeaders = new Headers(headers);
+    if (!requestHeaders.has('user-agent')) requestHeaders.set('user-agent', DEFAULT_USER_AGENT);
+    // accept-encoding is pinned to the codecs undici decodes correctly.
+    // Left unset, Node negotiates zstd, and amazon.jobs' zstd response comes
+    // back TRUNCATED AT 1024 BYTES with a 200 status — so the failure surfaces
+    // as an unrelated-looking "Unterminated string in JSON at position 1024"
+    // rather than a transport error. curl on the same URL returns the full
+    // ~900KB. Callers can still override via `headers`.
+    if (!requestHeaders.has('accept-encoding')) requestHeaders.set('accept-encoding', 'gzip, deflate, br');
     const res = await fetch(url, {
       method,
-      headers: { 'user-agent': DEFAULT_USER_AGENT, ...headers },
+      headers: requestHeaders,
       body,
       redirect,
       signal: controller.signal,
     });
+    onResponse?.(res);
     if (!res.ok) {
       const responseText = await res.text().catch(() => '');
       // WAF/CDN challenge pages (seen live: Workday 429s) carry no actionable
@@ -118,8 +137,8 @@ export async function fetchText(url, opts = {}) {
 // Returns a Response (after the timeout + non-2xx guard) so providers that need
 // response headers — csod.mjs reads Set-Cookie to prime the session its search
 // API requires — can route through ctx instead of re-implementing fetch. Pass
-// redirect:'error' like every other provider call so a 3xx can't be followed to
-// a private IP.
+// redirect:'error' is the default here like everywhere else, so a 3xx can't be
+// followed to a private IP.
 //
 // The body is read here, inside the timer window, and handed back as an
 // equivalent Response. Two reasons: returning the live Response would let a
@@ -319,11 +338,32 @@ export async function fetchTextWithRetry(ctx, url, opts = {}, policy = {}) {
   return withRetry(() => ctx.fetchText(url, opts), ctx, policy);
 }
 
-export function makeHttpCtx() {
-  return {
+export function makeHttpCtx(observer) {
+  const ctx = {
     transport: 'http',
     fetchJson,
     fetchText,
     fetchResponse,
+    // The canonical posting-URL key, so a provider can deduplicate its own
+    // results the way the tracker and scanner do. Handing it over through ctx
+    // is what keeps the behaviour identical: `url-key.mjs` is dependency-free,
+    // so a standalone provider receives the same function the core calls rather
+    // than importing the file or copying its body (#4218).
+    normalizePostingUrl: normalizeUrl,
   };
+  if (!observer) return ctx;
+  for (const method of ['fetchJson', 'fetchText', 'fetchResponse']) {
+    const original = ctx[method];
+    ctx[method] = (url, opts = {}) => {
+      observer.onRequest?.();
+      return original(url, {
+        ...opts,
+        onResponse: response => {
+          opts.onResponse?.(response);
+          observer.onResponse?.(response.status);
+        },
+      });
+    };
+  }
+  return ctx;
 }
